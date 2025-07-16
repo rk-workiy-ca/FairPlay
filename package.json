@@ -1,0 +1,41 @@
+{
+  "name": "fairplay-rummy-poc",
+  "version": "1.0.0",
+  "description": "FairPlay Rummy - Proof of Concept for Indian Rummy Card Game",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "nodemon server/app.js",
+    "client": "live-server public",
+    "test": "jest"
+  },
+  "keywords": [
+    "rummy",
+    "card-game",
+    "indian-rummy",
+    "real-time",
+    "multiplayer"
+  ],
+  "author": "FairPlay Team",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "openai": "^5.9.2",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "live-server": "^1.2.2",
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

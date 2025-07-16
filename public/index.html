@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FairPlay Rummy - POC</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="screen active">
+        <div class="loading-content">
+            <h1>🃏 FairPlay Rummy</h1>
+            <p>Proof of Concept</p>
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+
+    <!-- Join Game Screen -->
+    <div id="join-screen" class="screen">
+        <div class="join-content">
+            <h1>🃏 FairPlay Rummy</h1>
+            <div class="join-form">
+                <h2>Join a Game</h2>
+                <input type="text" id="player-name" placeholder="Enter your name" maxlength="20">
+                <div class="game-options">
+                    <label>
+                        <input type="radio" name="players" value="2"> 2 Players
+                    </label>
+                    <label>
+                        <input type="radio" name="players" value="3"> 3 Players
+                    </label>
+                    <label>
+                        <input type="radio" name="players" value="4" checked> 4 Players
+                    </label>
+                </div>
+                <button id="join-game-btn" class="btn btn-primary">Join Game</button>
+                <div id="join-error" class="error-message"></div>
+            </div>
+            
+            <div class="game-rules">
+                <h3>Game Rules (Indian Rummy)</h3>
+                <ul>
+                    <li>Each player gets 13 cards from 2 decks (104 cards + 2 jokers)</li>
+                    <li>Form sequences (3+ consecutive cards) and sets (3-4 same rank)</li>
+                    <li>At least 1 pure sequence (without joker) required</li>
+                    <li>Draw from deck or discard pile, then discard one card</li>
+                    <li>Declare when you have valid combinations</li>
+                    <li>Jokers can substitute any card (except in pure sequences)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Waiting Screen -->
+    <div id="waiting-screen" class="screen">
+        <div class="waiting-content">
+            <h2>Waiting for Players</h2>
+            <div class="waiting-info">
+                <div id="waiting-players"></div>
+                <div class="waiting-spinner"></div>
+                <div id="wait-timer" class="wait-timer" style="display: none;">
+                    <p>AI bot will join in: <span id="countdown-time">--</span> seconds</p>
+                    <div class="timer-bar">
+                        <div id="timer-progress" class="timer-progress"></div>
+                    </div>
+                </div>
+                <p>Game will start automatically after wait time or when all players join</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen">
+        <!-- Game Header -->
+        <div class="game-header">
+            <div class="game-info">
+                <span id="game-id" class="game-id"></span>
+                <span id="wild-joker" class="wild-joker"></span>
+            </div>
+            <div class="turn-info">
+                <span id="current-turn" class="current-turn"></span>
+                <div id="turn-timer" class="turn-timer"></div>
+            </div>
+            <div class="actions">
+                <button id="drop-btn" class="btn btn-danger">Drop</button>
+                <button id="declare-btn" class="btn btn-success">Declare</button>
+            </div>
+        </div>
+
+        <!-- Game Table -->
+        <div class="game-table">
+            <!-- Other Players -->
+            <div class="players-area">
+                <div id="player-1" class="player-slot">
+                    <div class="player-info">
+                        <span class="player-name"></span>
+                        <span class="card-count"></span>
+                    </div>
+                    <div class="player-cards"></div>
+                </div>
+                <div id="player-2" class="player-slot">
+                    <div class="player-info">
+                        <span class="player-name"></span>
+                        <span class="card-count"></span>
+                    </div>
+                    <div class="player-cards"></div>
+                </div>
+                <div id="player-3" class="player-slot">
+                    <div class="player-info">
+                        <span class="player-name"></span>
+                        <span class="card-count"></span>
+                    </div>
+                    <div class="player-cards"></div>
+                </div>
+            </div>
+
+            <!-- Center Area (Deck and Discard) -->
+            <div class="center-area">
+                <div id="deck-pile" class="card-pile">
+                    <div class="card card-back"></div>
+                    <span class="pile-label">Deck</span>
+                    <span id="deck-count" class="card-count">52</span>
+                </div>
+                <div id="discard-pile" class="card-pile">
+                    <div id="discard-card" class="card empty">Empty</div>
+                    <span class="pile-label">Discard</span>
+                </div>
+            </div>
+
+            <!-- Current Player's Hand -->
+            <div class="player-hand">
+                <div class="hand-header">
+                    <span>Your Hand</span>
+                    <span id="hand-count" class="card-count">13 cards</span>
+                </div>
+                <div id="hand-cards" class="hand-cards"></div>
+            </div>
+        </div>
+
+        <!-- Action Panel -->
+        <div class="action-panel">
+            <div class="draw-actions">
+                <button id="draw-deck-btn" class="btn btn-secondary">Draw from Deck</button>
+                <button id="draw-discard-btn" class="btn btn-secondary">Draw from Discard</button>
+            </div>
+            <div class="game-status">
+                <span id="game-status">Waiting for turn...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen">
+        <div class="game-over-content">
+            <h2 id="game-result">Game Over</h2>
+            <div id="final-scores" class="final-scores"></div>
+            <div class="game-over-actions">
+                <button id="play-again-btn" class="btn btn-primary">Play Again</button>
+                <button id="home-btn" class="btn btn-secondary">Home</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error/Info Messages -->
+    <div id="message-container" class="message-container"></div>
+
+    <!-- Declaration Modal -->
+    <div id="declaration-modal" class="modal">
+        <div class="modal-content">
+            <h3>Declare Your Hand</h3>
+            <div class="declaration-area">
+                <div class="declaration-groups">
+                    <div class="group-slot" data-group="0">
+                        <div class="group-header">Group 1</div>
+                        <div class="group-cards"></div>
+                    </div>
+                    <div class="group-slot" data-group="1">
+                        <div class="group-header">Group 2</div>
+                        <div class="group-cards"></div>
+                    </div>
+                    <div class="group-slot" data-group="2">
+                        <div class="group-header">Group 3</div>
+                        <div class="group-cards"></div>
+                    </div>
+                    <div class="group-slot" data-group="3">
+                        <div class="group-header">Group 4</div>
+                        <div class="group-cards"></div>
+                    </div>
+                </div>
+                <div class="ungrouped-cards">
+                    <div class="group-header">Your Cards</div>
+                    <div id="modal-hand-cards" class="group-cards"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="validate-btn" class="btn btn-info">Validate</button>
+                <button id="confirm-declare-btn" class="btn btn-success">Confirm Declaration</button>
+                <button id="cancel-declare-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+            <div id="validation-result" class="validation-result"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html> 
