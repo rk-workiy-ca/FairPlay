@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-FairPlay is a digital Rummy card game platform that enables users to play Rummy with real money in a fair and transparent environment. The platform supports both web and mobile applications, with AI bots filling in when human players are unavailable.
+FairPlay is a digital Rummy card game platform that enables users to play Rummy with real money in a fair and transparent environment. The platform supports both web and mobile applications, with seamless player matching to ensure games always start quickly.
 
 ## 2. Functional Requirements
 
@@ -18,10 +18,10 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 #### 2.1.2 User Profile Management
 - **FR-006**: Users must have a profile with username, avatar, and game statistics
 - **FR-007**: Users must be able to view their current balance and transaction history
-- **FR-008**: Users must be able to set their skill level (beginner, intermediate, advanced)
+- **FR-008**: Users must have an automatically assigned skill level that cannot be manually changed
 - **FR-009**: Users must be able to set their preferred table size (3 or 4 players)
 - **FR-010**: Users must start at level 0 when they first register
-- **FR-011**: User levels must increase based on their winnings and performance
+- **FR-011**: User levels must increase automatically based on their winnings and performance
 - **FR-012**: Users must be able to view their current level and progress to next level
 - **FR-013**: Users must be able to see their level progression history
 - **FR-014**: Users must be able to view level-based achievements and rewards
@@ -30,9 +30,9 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 
 #### 2.2.1 Account Balance Management
 - **FR-015**: Users must be able to add money to their account through multiple payment methods
-- **FR-016**: Users must be able to withdraw their winnings
+- **FR-016**: Users must be able to withdraw their winnings 
 - **FR-017**: Users must be able to view their transaction history
-- **FR-018**: Users must have a minimum balance requirement to join tables
+- **FR-018**: Users must have a minimum balance requirement to join tables 
 
 #### 2.2.2 Commission and Fee Structure
 - **FR-019**: The platform must take a small percentage cut from each table's total amount
@@ -45,7 +45,12 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 - **FR-022**: Users must be able to create tables with specified entry fees
 - **FR-023**: Users must be able to join existing tables based on their skill level
 - **FR-024**: Tables must support 3 or 4 players as per user preference
-- **FR-025**: Tables must have a maximum waiting time for players to join
+- **FR-025**: Tables must have a dynamic maximum waiting time for players to join based on time of day:
+  - Peak Hours: 30-45 seconds maximum wait time
+  - Regular Hours: 60-90 seconds maximum wait time  
+  - Off-Peak Hours: 90-120 seconds maximum wait time
+- **FR-025a**: The system must display a countdown timer showing remaining wait time to users
+- **FR-025b**: The system must automatically fill remaining seats with AI bots when maximum wait time is reached
 
 #### 2.3.2 Player Matching System
 - **FR-026**: Players must be randomly selected from available players looking to join tables
@@ -54,16 +59,23 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 - **FR-029**: Players must be able to see the skill level of other players at their table
 - **FR-030**: Players must be matched with other players at the same level (level-based matching)
 - **FR-031**: The system must prioritize matching players within the same level range
-- **FR-032**: If no players are available at the same level, the system must expand to adjacent levels
+- **FR-032**: If no players are available at the same level, the system must expand to adjacent levels after 50% of maximum wait time
 - **FR-033**: Players must be able to see the levels of all players at their table before joining
 - **FR-034**: The system must prevent level manipulation and ensure fair level progression
+- **FR-035**: The system must define time periods as follows:
+  - Peak Hours: 6:00 PM - 11:00 PM (local time)
+  - Regular Hours: 10:00 AM - 6:00 PM and 11:00 PM - 12:00 AM (local time)
+  - Off-Peak Hours: 12:00 AM - 10:00 AM (local time)
+- **FR-036**: The system must automatically adjust wait times based on current server load and player availability
 
 #### 2.3.3 AI Bot Integration
-- **FR-035**: AI bots must fill in when human players are unavailable
-- **FR-036**: AI bots must play at the same skill level as the human players
-- **FR-037**: AI bots must be indistinguishable from human players in terms of gameplay
-- **FR-038**: Users must be notified when playing against AI bots
-- **FR-039**: AI bots must be matched based on the same level as human players
+- **FR-037**: AI bots must fill in when human players are unavailable or when maximum wait time is reached
+- **FR-038**: AI bots must play at the same skill level as the human players
+- **FR-039**: AI bots must be completely indistinguishable from human players in all aspects including gameplay, timing, and behavior
+- **FR-040**: AI bots must have realistic usernames, avatars, and profiles that appear as genuine human players
+- **FR-041**: AI bots must be matched based on the same level as human players
+- **FR-042**: The system must never reveal to players that they are playing against AI bots
+- **FR-043**: AI bots must exhibit human-like playing patterns including natural response times and occasional hesitation
 
 ### 2.4 Indian Rummy Game Engine
 
@@ -222,10 +234,11 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 
 #### 2.6.3 Level Progression Algorithm
 - **FR-311**: Level progression must be based on total winnings, win rate, and consistency
-- **FR-312**: The system must prevent level manipulation through artificial gameplay
-- **FR-313**: Level progression must be irreversible to prevent gaming the system
+- **FR-312**: The system must prevent level manipulation through artificial gameplay or manual setting
+- **FR-313**: Level progression must be irreversible and fully automated to prevent gaming the system
 - **FR-314**: The system must provide detailed breakdown of level calculation factors
 - **FR-315**: Users must be able to view their level history and progression timeline
+- **FR-316**: The system must ensure skill-based matchmaking by automatically assigning levels based on performance
 
 ### 2.7 Platform Support
 
@@ -430,19 +443,173 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 - **BR-008**: The platform must have a comprehensive FAQ and help section
 - **BR-009**: The platform must provide dispute resolution mechanisms
 
-## 6. Success Criteria
+## 6. Development Roadmap and Phases
 
-### 6.1 User Engagement
+### 6.1 POC (Proof of Concept) - 4-6 weeks
+
+**Objective**: Validate core game mechanics and technical feasibility
+
+#### Core Features:
+- **Game Engine**: Basic Indian Rummy rules implementation (FR-075 to FR-084)
+- **Card Management**: 2 decks, 13 cards per player, basic shuffling (FR-075, FR-076, FR-078)
+- **Game Flow**: Turn-based gameplay, draw/discard mechanics (FR-085, FR-086, FR-087)
+- **Basic UI**: Simple card display and interaction (FR-093, FR-094, FR-095)
+- **Local Testing**: Single device multiplayer for testing
+- **User Authentication**: Basic registration and login (FR-001, FR-002)
+- **Game Validation**: Basic card combination validation (FR-096, FR-097)
+
+#### Success Criteria:
+- Functional card game with 2-4 players on single device
+- Core rummy rules working correctly
+- Basic UI allows card selection and arrangement
+- Game can detect valid declarations
+
+### 6.2 MVP (Minimum Viable Product) - 8-12 weeks
+
+**Objective**: Launch-ready platform with essential features for real money gaming
+
+#### Core Features:
+- **Real Money Integration**: Payment gateway integration (FR-015, FR-016, TR-013)
+- **User Management**: Complete profile system with automatic skill levels (FR-006 to FR-014)
+- **AI Bot System**: Invisible bot integration with human-like behavior (FR-037 to FR-043)
+- **Matchmaking**: Level-based player matching with dynamic wait times (FR-025 to FR-036)
+- **Financial System**: Commission structure, balance management (FR-017 to FR-021)
+- **Web Application**: Responsive web interface (FR-316 to FR-318)
+- **Security**: Basic encryption and secure transactions (NFR-005 to NFR-008)
+- **Game Variants**: Points Rummy (single game format) (FR-119, FR-120)
+
+#### Success Criteria:
+- 100 concurrent users supported
+- Real money transactions working
+- Invisible AI bots indistinguishable from humans
+- Games start within specified wait times
+- Basic security measures implemented
+
+### 6.3 Phase 1: Enhanced User Experience - 6-8 weeks
+
+**Objective**: Improve user engagement and platform stability
+
+#### Features:
+- **Mobile Applications**: iOS and Android apps (FR-319 to FR-321)
+- **Advanced UI/UX**: Indian club table design, age-friendly interface (FR-251 to FR-292)
+- **Real-time Features**: Chat functionality, emoji reactions (FR-124, FR-125)
+- **Game History**: Replay functionality and statistics (FR-127, FR-128)
+- **Performance Optimization**: Screen freeze prevention, stability improvements (FR-356 to FR-403)
+- **Additional Game Variants**: Pool Rummy (101/201 points) (FR-117)
+- **Connection Handling**: Graceful disconnection/reconnection (FR-128, FR-129)
+
+#### Success Criteria:
+- Mobile apps launched on both platforms
+- 99.95% game completion rate without glitches
+- User satisfaction score >4.5/5
+- 500 concurrent users supported
+
+### 6.4 Phase 2: Scale and Advanced Features - 8-10 weeks
+
+**Objective**: Handle larger user base and add competitive features
+
+#### Features:
+- **Low Bandwidth Optimization**: Complete implementation (FR-322 to FR-355)
+- **Tournament System**: Multi-round tournaments (FR-121, FR-122)
+- **Advanced Analytics**: User behavior tracking, happiness index (FR-293 to FR-295)
+- **Deals Rummy**: Fixed deals variant (FR-118)
+- **Advanced Matchmaking**: Sophisticated algorithms for fair play (FR-296 to FR-299)
+- **Performance Monitoring**: Real-time system health (FR-388 to FR-395)
+- **Advanced Security**: Anti-cheating measures (FR-109 to FR-116)
+- **Data Optimization**: Binary protocols, compression (FR-322 to FR-328)
+
+#### Success Criteria:
+- 2,000 concurrent users supported
+- Functions on 64 Kbps connections
+- Tournament system operational
+- Advanced anti-cheating measures active
+
+### 6.5 Phase 3: Enterprise Scale and Premium Features - 10-12 weeks
+
+**Objective**: Large-scale platform with premium gaming experience
+
+#### Features:
+- **Massive Scalability**: Support for 10,000+ concurrent users (NFR-001)
+- **Multi-language Support**: Regional language interfaces (NFR-014)
+- **Advanced Tournaments**: Large-scale competitive events
+- **Premium UI Themes**: Multiple table designs and customization (FR-273)
+- **Advanced AI**: Machine learning-based bot improvements
+- **Social Features**: Friend systems, social sharing
+- **Advanced Analytics**: Detailed reporting and insights
+- **Global Deployment**: Multi-region server deployment (TR-008)
+- **Advanced Customer Support**: 24/7 support system (BR-007 to BR-009)
+
+#### Success Criteria:
+- 10,000 concurrent users supported
+- 99.9% uptime achieved (NFR-003)
+- Multi-language support implemented
+- Advanced tournament system operational
+
+### 6.6 Phase 4: Market Leadership and Innovation - 6-8 weeks
+
+**Objective**: Industry-leading features and market dominance
+
+#### Features:
+- **AI-Powered Insights**: Personalized game recommendations
+- **Advanced Customization**: User-specific table preferences
+- **Blockchain Integration**: Transparent transaction records (optional)
+- **VR/AR Support**: Immersive gaming experience (future-ready)
+- **Advanced Social Features**: Clubs, communities, leaderboards
+- **Machine Learning**: Predictive analytics for user behavior
+- **Global Expansion**: Multi-currency, regional compliance
+- **Advanced Security**: Biometric authentication, advanced fraud detection
+
+#### Success Criteria:
+- Market leadership in online rummy
+- Advanced features setting industry standards
+- Global user base established
+- Innovative gaming experience delivered
+
+### 6.7 Feature Priority Matrix
+
+#### Critical (Must Have - POC/MVP):
+- Core game engine and rules
+- Real money transactions
+- User authentication and profiles
+- AI bot system (invisible)
+- Basic matchmaking
+- Security fundamentals
+
+#### Important (Should Have - Phase 1/2):
+- Mobile applications
+- Advanced UI/UX
+- Performance optimizations
+- Low bandwidth support
+- Tournament system
+- Chat features
+
+#### Nice to Have (Could Have - Phase 3/4):
+- Multiple themes
+- Advanced social features
+- Multi-language support
+- VR/AR capabilities
+- Blockchain integration
+- Advanced analytics
+
+#### Future Enhancements (Won't Have Initially):
+- Virtual reality integration
+- Cryptocurrency payments
+- Advanced AI coaching
+- Cross-platform gaming with other card games
+
+## 7. Success Criteria
+
+### 7.1 User Engagement
 - **SC-001**: Achieve 10,000 concurrent users within 6 months of launch
 - **SC-002**: Maintain user retention rate of 70% after 30 days
 - **SC-003**: Achieve average session duration of 45 minutes
 
-### 6.2 Financial Performance
+### 7.2 Financial Performance
 - **SC-004**: Generate positive revenue within 3 months of launch
 - **SC-005**: Maintain commission rate of 5-10% of table amounts
 - **SC-006**: Achieve monthly active users growth of 20%
 
-### 6.3 Technical Performance
+### 7.3 Technical Performance
 - **SC-007**: Maintain 99.9% system uptime
 - **SC-008**: Achieve average response time of less than 2 seconds
 - **SC-009**: Support 10,000 concurrent users without performance degradation
@@ -454,9 +621,9 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 - **SC-015**: Reduce screen freeze incidents by 99% compared to existing solutions
 - **SC-016**: Achieve zero unfair game folding due to technical issues
 
-## 7. Assumptions and Constraints
+## 8. Assumptions and Constraints
 
-### 7.1 Assumptions
+### 8.1 Assumptions
 - Users have basic knowledge of Rummy card game rules
 - Users have access to internet connection (minimum 64 Kbps)
 - Users are willing to play with real money
@@ -464,15 +631,15 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 - Users may experience varying network conditions and connectivity issues
 - Users may have limited data plans and bandwidth constraints
 
-### 7.2 Constraints
+### 8.2 Constraints
 - Must comply with local gambling laws and regulations
 - Must implement responsible gaming measures
 - Must ensure fair play and prevent cheating
 - Must maintain user privacy and data security
 
-## 8. Risk Assessment
+## 9. Risk Assessment
 
-### 8.1 Technical Risks
+### 9.1 Technical Risks
 - **Risk-001**: Scalability challenges with 10,000 concurrent users
 - **Risk-002**: Real-time communication reliability issues
 - **Risk-003**: AI bot performance and fairness concerns
@@ -484,12 +651,12 @@ FairPlay is a digital Rummy card game platform that enables users to play Rummy 
 - **Risk-009**: Unfair game folding due to technical glitches
 - **Risk-010**: Memory leaks and performance degradation over time
 
-### 8.2 Business Risks
-- **Risk-004**: Regulatory compliance challenges
-- **Risk-005**: User adoption and retention issues
-- **Risk-006**: Competition from existing gaming platforms
+### 9.2 Business Risks
+- **Risk-011**: Regulatory compliance challenges
+- **Risk-012**: User adoption and retention issues
+- **Risk-013**: Competition from existing gaming platforms
 
-### 8.3 Mitigation Strategies
+### 9.3 Mitigation Strategies
 - Implement robust testing and monitoring systems
 - Regular security audits and compliance checks
 - Continuous user feedback and platform improvements
