@@ -28,6 +28,7 @@ class GameEngine {
       middle: 40,
       full: 80
     };
+    this.onStateChange = null; // Callback for state changes
     
     console.log(`Game ${this.gameId} created for ${this.maxPlayers} players`);
   }
@@ -59,7 +60,9 @@ class GameEngine {
       hasDropped: false,
       dropType: null,
       isConnected: true,
-      joinedAt: new Date()
+      joinedAt: new Date(),
+      timeoutCount: 0, // Track number of timeouts
+      maxTimeouts: 3   // Allow 3 timeouts before auto-drop
     };
 
     this.players.push(player);
@@ -174,6 +177,10 @@ class GameEngine {
     }
 
     player.hand.push(drawnCard);
+    
+    // Reset timeout count on successful action
+    player.timeoutCount = 0;
+    
     console.log(`Player ${player.name} drew ${drawnCard.getDisplayName()} from ${source}`);
 
     return { 
@@ -204,6 +211,9 @@ class GameEngine {
 
     const discardedCard = player.hand.splice(cardIndex, 1)[0];
     this.deck.addToDiscardPile(discardedCard);
+
+    // Reset timeout count on successful action
+    player.timeoutCount = 0;
 
     console.log(`Player ${player.name} discarded ${discardedCard.getDisplayName()}`);
 
@@ -288,12 +298,52 @@ class GameEngine {
         score: player.score,
         hasDropped: player.hasDropped,
         dropType: player.dropType,
-        isConnected: player.isConnected
+        isConnected: player.isConnected,
+        isBot: player.isBot || false,
+        timeoutCount: player.timeoutCount || 0,
+        maxTimeouts: player.maxTimeouts || 3,
+        isAutoDropped: player.isAutoDropped || false
       })),
       currentTurn: this.currentTurn,
       currentPlayer: this.players[this.currentTurn]?.name || null,
       deck: this.deck?.toJSON() || null,
       wildJoker: this.deck?.getWildJoker()?.toJSON() || null,
+      discardPile: this.deck?.discardPile?.map(card => card.toJSON()) || [],
+      deckCount: this.deck?.cards?.length || 0,
+      winner: this.winner,
+      gameStartTime: this.gameStartTime,
+      gameEndTime: this.gameEndTime
+    };
+  }
+
+  /**
+   * Get game state for AI decision making (includes hand data)
+   * @returns {Object} Game state with hand data
+   */
+  getGameStateForAI() {
+    return {
+      gameId: this.gameId,
+      gameState: this.gameState,
+      players: this.players.map(player => ({
+        id: player.id,
+        name: player.name,
+        hand: player.hand.map(card => card.toJSON()),
+        handCount: player.hand.length,
+        score: player.score,
+        hasDropped: player.hasDropped,
+        dropType: player.dropType,
+        isConnected: player.isConnected,
+        isBot: player.isBot || false,
+        timeoutCount: player.timeoutCount || 0,
+        maxTimeouts: player.maxTimeouts || 3,
+        isAutoDropped: player.isAutoDropped || false
+      })),
+      currentTurn: this.currentTurn,
+      currentPlayer: this.players[this.currentTurn]?.name || null,
+      deck: this.deck?.toJSON() || null,
+      wildJoker: this.deck?.getWildJoker()?.toJSON() || null,
+      discardPile: this.deck?.discardPile?.map(card => card.toJSON()) || [],
+      deckCount: this.deck?.cards?.length || 0,
       winner: this.winner,
       gameStartTime: this.gameStartTime,
       gameEndTime: this.gameEndTime
@@ -401,23 +451,45 @@ class GameEngine {
     }
 
     this.turnTimer = setTimeout(() => {
-      // Auto-drop player if they don't play within time limit
+      // Handle player timeout with 3-chances system
       const currentPlayer = this.players[this.currentTurn];
-      if (currentPlayer && !currentPlayer.hasDropped) {
-        console.log(`Player ${currentPlayer.name} timed out, auto-dropping`);
-        this._handlePlayerDrop(currentPlayer.id, 'middle');
+      if (currentPlayer && !currentPlayer.hasDropped && !currentPlayer.isBot) {
+        this._handlePlayerTimeout(currentPlayer);
       }
     }, this.turnTimeLimit);
+  }
+
+  /**
+   * Handle player timeout with 3-chances system
+   * @param {Object} player - Player object
+   * @private
+   */
+  _handlePlayerTimeout(player) {
+    player.timeoutCount += 1;
+    
+    if (player.timeoutCount >= player.maxTimeouts) {
+      // Player has reached maximum timeouts, auto-drop them
+      console.log(`Player ${player.name} timed out ${player.timeoutCount} times, auto-dropping`);
+      this._handlePlayerDrop(player.id, 'middle', true); // true indicates auto-drop
+    } else {
+      // Player still has chances left, skip their turn
+      const remainingChances = player.maxTimeouts - player.timeoutCount;
+      console.log(`Player ${player.name} timed out (${player.timeoutCount}/${player.maxTimeouts}), skipping turn. ${remainingChances} chances left`);
+      
+      // Move to next player's turn
+      this._nextTurn();
+    }
   }
 
   /**
    * Handle player drop
    * @param {string} playerId - Player ID
    * @param {string} dropType - Drop type
+   * @param {boolean} isAutoDropped - Whether this is an auto-drop due to timeouts
    * @returns {Object} Result
    * @private
    */
-  _handlePlayerDrop(playerId, dropType) {
+  _handlePlayerDrop(playerId, dropType, isAutoDropped = false) {
     const player = this.players.find(p => p.id === playerId);
     if (!player || player.hasDropped) {
       return { success: false, reason: 'Player already dropped or not found' };
@@ -426,14 +498,22 @@ class GameEngine {
     player.hasDropped = true;
     player.dropType = dropType;
     player.score = this.dropPenalties[dropType] || this.dropPenalties.middle;
+    player.isAutoDropped = isAutoDropped; // Track if this was an auto-drop
 
-    console.log(`Player ${player.name} dropped with ${dropType} penalty (${player.score} points)`);
+    if (isAutoDropped) {
+      console.log(`Player ${player.name} auto-dropped after ${player.timeoutCount} timeouts with ${dropType} penalty (${player.score} points)`);
+    } else {
+      console.log(`Player ${player.name} dropped with ${dropType} penalty (${player.score} points)`);
+    }
 
     // Check if we need to end the game
     const activePlayers = this.players.filter(p => !p.hasDropped);
     if (activePlayers.length === 1) {
-      this._endGame(activePlayers[0].id, { isValid: true, totalPoints: 0 });
+      const winner = activePlayers[0];
+      console.log(`Game ${this.gameId} ended. Winner: ${winner.name}`);
+      this._endGame(winner.id, { isValid: true, totalPoints: 0, winReason: 'Last player remaining' });
     } else if (activePlayers.length === 0) {
+      console.log(`Game ${this.gameId} ended. No winner - all players dropped`);
       this._endGame(null, { isValid: false, reason: 'All players dropped' });
     } else {
       // Continue with next turn
@@ -518,7 +598,10 @@ class GameEngine {
         hand: [],
         score: 0,
         hasDropped: false,
-        dropType: null
+        dropType: null,
+        timeoutCount: 0,
+        maxTimeouts: 3,
+        isAutoDropped: false
       };
       
       this.players.push(bot);
@@ -541,7 +624,7 @@ class GameEngine {
       
       // Get AI decision
       const playerIndex = this.players.findIndex(p => p.id === aiPlayer.id);
-      const decision = await this.aiService.makeDecision(this.getGameState(), playerIndex);
+      const decision = await this.aiService.makeDecision(this.getGameStateForAI(), playerIndex);
       
       console.log(`AI ${aiPlayer.name} decision:`, decision.reasoning);
       
@@ -559,22 +642,36 @@ class GameEngine {
         return;
       }
       
-      // Find the card to discard
-      const cardToDiscard = aiPlayer.hand.find(card => 
-        this.aiService.cardToString(card) === decision.cardToDiscard
-      );
-      
-      if (!cardToDiscard) {
-        console.log(`AI ${aiPlayer.name} couldn't find card to discard, using random card`);
+      // Handle discard decision
+      if (!decision.cardToDiscard || decision.cardToDiscard === null) {
+        console.log(`AI ${aiPlayer.name} decision returned null card, using random discard`);
         // Fallback to random discard
         const randomCard = aiPlayer.hand[Math.floor(Math.random() * aiPlayer.hand.length)];
         const discardResult = this.discardCard(aiPlayer.id, randomCard.id);
-      } else {
-        // Execute AI's discard decision
-        const discardResult = this.discardCard(aiPlayer.id, cardToDiscard.id);
-        
         if (!discardResult.success) {
-          console.log(`AI ${aiPlayer.name} failed to discard:`, discardResult.reason);
+          console.log(`AI ${aiPlayer.name} failed to discard random card:`, discardResult.reason);
+        }
+      } else {
+        // Find the card to discard
+        const cardToDiscard = aiPlayer.hand.find(card => 
+          this.aiService.cardToString(card) === decision.cardToDiscard
+        );
+        
+        if (!cardToDiscard) {
+          console.log(`AI ${aiPlayer.name} couldn't find specified card to discard, using random card`);
+          // Fallback to random discard
+          const randomCard = aiPlayer.hand[Math.floor(Math.random() * aiPlayer.hand.length)];
+          const discardResult = this.discardCard(aiPlayer.id, randomCard.id);
+          if (!discardResult.success) {
+            console.log(`AI ${aiPlayer.name} failed to discard fallback card:`, discardResult.reason);
+          }
+        } else {
+          // Execute AI's discard decision
+          const discardResult = this.discardCard(aiPlayer.id, cardToDiscard.id);
+          
+          if (!discardResult.success) {
+            console.log(`AI ${aiPlayer.name} failed to discard:`, discardResult.reason);
+          }
         }
       }
       
@@ -590,22 +687,35 @@ class GameEngine {
         }
       }
       
-      // Move to next turn
-      this._nextTurn();
+      // Note: _nextTurn() is already called by discardCard(), so we don't call it again
+      
+      // Notify server of state change
+      this._notifyStateChange();
       
     } catch (error) {
       console.error(`Error in AI turn for ${aiPlayer.name}:`, error);
-      // Fallback: make random moves
-      this._makeRandomAIMove(aiPlayer);
+      // Fallback: make random moves with proper turn management
+      this._makeRandomAIMove(aiPlayer, true);
+    }
+  }
+
+  /**
+   * Notify server of state change
+   * @private
+   */
+  _notifyStateChange() {
+    if (this.onStateChange) {
+      this.onStateChange(this);
     }
   }
 
   /**
    * Fallback random AI move when OpenAI fails
    * @param {Object} aiPlayer - AI player object
+   * @param {boolean} manageTurns - Whether to manage turns and broadcasting (default true)
    * @private
    */
-  _makeRandomAIMove(aiPlayer) {
+  _makeRandomAIMove(aiPlayer, manageTurns = true) {
     try {
       // Random draw
       const drawFromDiscard = Math.random() < 0.3;
@@ -615,12 +725,23 @@ class GameEngine {
         // Random discard
         const randomCard = aiPlayer.hand[Math.floor(Math.random() * aiPlayer.hand.length)];
         this.discardCard(aiPlayer.id, randomCard.id);
+        // Note: discardCard() already calls _nextTurn(), so we don't call it again
+      } else if (manageTurns) {
+        // If draw failed and we're managing turns, still advance turn
+        this._nextTurn();
       }
       
-      this._nextTurn();
+      // Notify server of state change after AI fallback move (only if managing turns)
+      if (manageTurns) {
+        this._notifyStateChange();
+      }
+      
     } catch (error) {
       console.error(`Error in random AI move for ${aiPlayer.name}:`, error);
-      this._nextTurn();
+      if (manageTurns) {
+        this._nextTurn();
+        this._notifyStateChange();
+      }
     }
   }
 

@@ -50,6 +50,12 @@ function findOrCreateGame(maxPlayers = 4) {
 
   // Create new game if none found
   const newGame = new GameEngine(null, maxPlayers);
+  
+  // Set up state change callback for broadcasting
+  newGame.onStateChange = (game) => {
+    broadcastToGame(game.gameId, 'game_state_update', game.getGameState());
+  };
+  
   games.set(newGame.gameId, newGame);
   
   // Cleanup finished games periodically

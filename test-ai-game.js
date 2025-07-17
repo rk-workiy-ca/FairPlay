@@ -1,3 +1,4 @@
+require('dotenv').config();
 const GameEngine = require('./server/game/GameEngine');
 
 async function testAIBotGameplay() {

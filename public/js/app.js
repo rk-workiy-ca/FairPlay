@@ -247,7 +247,7 @@ class FairPlayApp {
         }
 
         if (this.hand.length <= 13) {
-            UI.showMessage("You must draw a card first", 'error');
+            UI.showMessage("Draw a card first, then double-click a card to discard it", 'error');
             return;
         }
 

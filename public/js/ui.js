@@ -273,14 +273,31 @@ class UI {
 
         const cardsHtml = hand.map(card => {
             return `<div class="card ${this.getCardSuitClass(card.suit)} ${card.isJoker ? 'joker' : ''}" 
-                         data-card-id="${card.id}"
-                         onclick="app.selectCard(this, '${card.id}')"
-                         ondblclick="app.handleCardDiscard('${card.id}')">
+                         data-card-id="${card.id}">
                         ${card.displayName}
                     </div>`;
         }).join('');
 
         handCardsEl.innerHTML = cardsHtml;
+        
+        // Add event listeners to cards (CSP-compliant)
+        handCardsEl.querySelectorAll('.card').forEach(cardEl => {
+            const cardId = cardEl.dataset.cardId;
+            
+            // Single click to select
+            cardEl.addEventListener('click', () => {
+                if (window.app) {
+                    window.app.selectCard(cardEl, cardId);
+                }
+            });
+            
+            // Double click to discard
+            cardEl.addEventListener('dblclick', () => {
+                if (window.app) {
+                    window.app.handleCardDiscard(cardId);
+                }
+            });
+        });
     }
 
     /**
@@ -355,13 +372,24 @@ class UI {
             const cardsHtml = hand.map(card => {
                 return `<div class="card ${this.getCardSuitClass(card.suit)} ${card.isJoker ? 'joker' : ''}" 
                              data-card-id="${card.id}"
-                             draggable="true"
-                             ondragstart="UI.handleDragStart(event)"
-                             onclick="UI.toggleCardSelection(this)">
+                             draggable="true">
                             ${card.displayName}
                         </div>`;
             }).join('');
             modalHandCards.innerHTML = cardsHtml;
+            
+            // Add event listeners to modal cards (CSP-compliant)
+            modalHandCards.querySelectorAll('.card').forEach(cardEl => {
+                // Drag start event
+                cardEl.addEventListener('dragstart', (event) => {
+                    UI.handleDragStart(event);
+                });
+                
+                // Click to select
+                cardEl.addEventListener('click', () => {
+                    UI.toggleCardSelection(cardEl);
+                });
+            });
         }
 
         // Setup drag and drop for group slots

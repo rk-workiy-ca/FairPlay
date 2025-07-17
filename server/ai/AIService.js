@@ -52,8 +52,15 @@ class AIService {
      */
     prepareGameContext(gameState, playerIndex) {
         const player = gameState.players[playerIndex];
+        
+        // Validate player and hand data
+        if (!player || !player.hand || !Array.isArray(player.hand)) {
+            console.log('Invalid player or hand data in prepareGameContext');
+            throw new Error('Invalid player or hand data');
+        }
+        
         const hand = player.hand.map(card => this.cardToString(card));
-        const discardPile = gameState.discardPile.map(card => this.cardToString(card));
+        const discardPile = (gameState.discardPile || []).map(card => this.cardToString(card));
         const topDiscard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
         
         // Analyze current hand for sequences and sets
@@ -62,12 +69,12 @@ class AIService {
         return {
             hand,
             topDiscard,
-            remainingDeckCards: gameState.deck.cards.length,
-            wildJoker: this.cardToString(gameState.wildJoker),
+            remainingDeckCards: gameState.deck?.cards?.length || 0,
+            wildJoker: gameState.wildJoker ? this.cardToString(gameState.wildJoker) : null,
             handAnalysis: analysis,
             gamePhase: this.determineGamePhase(gameState),
             opponentCardCounts: gameState.players.map((p, i) => 
-                i !== playerIndex ? p.hand.length : null
+                i !== playerIndex && p.hand ? p.hand.length : null
             ).filter(count => count !== null)
         };
     }
@@ -234,7 +241,18 @@ Respond with ONLY a JSON object in this format:
      */
     makeRandomDecision(gameState, playerIndex) {
         const player = gameState.players[playerIndex];
-        const topDiscard = gameState.discardPile[gameState.discardPile.length - 1];
+        const topDiscard = gameState.discardPile && gameState.discardPile.length > 0 ? 
+                          gameState.discardPile[gameState.discardPile.length - 1] : null;
+        
+        // Check if we have hand data
+        if (!player.hand || !Array.isArray(player.hand) || player.hand.length === 0) {
+            console.log('No hand data available for AI fallback decision');
+            return {
+                pickFromDiscard: false,
+                cardToDiscard: null,
+                reasoning: "No hand data available for fallback"
+            };
+        }
         
         // Simple random logic
         const pickFromDiscard = topDiscard && Math.random() < 0.3; // 30% chance to pick from discard
