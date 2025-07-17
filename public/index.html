@@ -133,9 +133,17 @@
             <div class="player-hand">
                 <div class="hand-header">
                     <span>Your Hand</span>
-                    <span id="hand-count" class="card-count">13 cards</span>
+                    <div class="hand-controls">
+                        <button id="auto-arrange-btn" class="btn btn-small btn-secondary" title="Auto-arrange cards by suit and rank">
+                            📋 Arrange
+                        </button>
+                        <span id="hand-count" class="card-count">13 cards</span>
+                    </div>
                 </div>
                 <div id="hand-cards" class="hand-cards"></div>
+                <div class="drag-hint">
+                    <small>💡 Drag cards to rearrange them manually</small>
+                </div>
             </div>
         </div>
 

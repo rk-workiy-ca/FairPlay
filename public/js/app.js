@@ -489,11 +489,78 @@ class FairPlayApp {
     }
 
     /**
-     * Handle card discard (double-click or button)
+     * Make a declaration (automatic or manual)
+     */
+    makeDeclaration() {
+        if (!this.isMyTurn()) {
+            UI.showMessage("It's not your turn", 'error');
+            return;
+        }
+
+        if (this.hand.length !== 13) {
+            UI.showMessage("You must have exactly 13 cards to declare", 'error');
+            return;
+        }
+
+        // Try automatic arrangement first
+        const autoArrangement = UI.findValidArrangement(this.hand);
+        if (autoArrangement && autoArrangement.isValid) {
+            // Auto-declare if valid arrangement found
+            const groups = autoArrangement.groups.map(group => 
+                group.cards.map(card => card.id)
+            );
+            
+            console.log('Auto-declaring with groups:', groups);
+            this.socket.emit('declare_hand', { groups });
+            UI.showMessage('🎉 Auto-declaration submitted!', 'success');
+        } else {
+            // Fallback to manual declaration modal
+            UI.openDeclarationModal(this.hand);
+        }
+    }
+
+    /**
+     * Handle card discard with improved feedback
      */
     handleCardDiscard(cardId) {
-        // Double-click should directly discard the card
-        this.discardCard(cardId);
+        if (!this.isMyTurn()) {
+            UI.showMessage("It's not your turn", 'error');
+            return;
+        }
+
+        if (this.hand.length <= 13) {
+            UI.showMessage("Draw a card first, then double-click a card to discard it", 'error');
+            return;
+        }
+
+        // Find and remove card from local hand for immediate UI feedback
+        const cardIndex = this.hand.findIndex(card => card.id === cardId);
+        if (cardIndex !== -1) {
+            const discardedCard = this.hand[cardIndex];
+            
+            // Remove card from UI immediately
+            const cardEl = document.querySelector(`[data-card-id="${cardId}"]`);
+            if (cardEl) {
+                cardEl.style.transition = 'all 0.3s ease';
+                cardEl.style.transform = 'scale(0)';
+                cardEl.style.opacity = '0';
+                setTimeout(() => {
+                    if (cardEl.parentNode) {
+                        cardEl.parentNode.removeChild(cardEl);
+                    }
+                }, 300);
+            }
+            
+            // Update hand count immediately
+            const handCountEl = document.getElementById('hand-count');
+            if (handCountEl) {
+                handCountEl.textContent = `${this.hand.length - 1} cards`;
+            }
+        }
+
+        console.log(`Discarding card: ${cardId}`);
+        this.socket.emit('discard_card', { cardId });
+        this.selectedCard = null;
     }
 }
 
@@ -501,6 +568,30 @@ class FairPlayApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new FairPlayApp();
 });
+
+// Add updateCardOrder method to FairPlayApp prototype
+FairPlayApp.prototype.updateCardOrder = function() {
+    // Get current card order from DOM
+    const handCardsEl = document.getElementById('hand-cards');
+    if (!handCardsEl || !this.gameState || !this.gameState.playerHand) return;
+    
+    const cardElements = handCardsEl.querySelectorAll('.card[data-card-id]');
+    const newOrder = Array.from(cardElements).map(el => el.dataset.cardId);
+    
+    // Reorder the hand array to match DOM order
+    const reorderedHand = [];
+    newOrder.forEach(cardId => {
+        const card = this.gameState.playerHand.find(c => c.id === cardId);
+        if (card) {
+            reorderedHand.push(card);
+        }
+    });
+    
+    // Update the game state
+    if (reorderedHand.length === this.gameState.playerHand.length) {
+        this.gameState.playerHand = reorderedHand;
+    }
+};
 
 // Export for use in other files
 window.FairPlayApp = FairPlayApp; 

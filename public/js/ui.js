@@ -260,7 +260,8 @@ class UI {
     }
 
     /**
-     * Update player's hand display
+     * Update player's hand display with drag-and-drop arrangement
+     * Preserves existing arrangement when possible
      */
     static updatePlayerHand(hand) {
         const handCardsEl = document.getElementById('hand-cards');
@@ -271,16 +272,143 @@ class UI {
             handCountEl.textContent = `${hand.length} cards`;
         }
 
+        // Check if this is just adding a new card (preserve arrangement)
+        const currentCards = Array.from(handCardsEl.querySelectorAll('.card[data-card-id]'));
+        const currentCardIds = currentCards.map(el => el.dataset.cardId);
+        const newHandIds = hand.map(card => card.id);
+        
+        // If we're just adding one card, preserve the current arrangement
+        if (currentCardIds.length === hand.length - 1 && 
+            currentCardIds.every(id => newHandIds.includes(id))) {
+            
+            // Find the new card
+            const newCard = hand.find(card => !currentCardIds.includes(card.id));
+            if (newCard) {
+                // Add the new card at the end
+                const newCardHtml = `<div class="card ${this.getCardSuitClass(newCard.suit)} ${newCard.isJoker ? 'joker' : ''}" 
+                                         data-card-id="${newCard.id}"
+                                         draggable="true">
+                                        ${newCard.displayName}
+                                    </div>`;
+                handCardsEl.insertAdjacentHTML('beforeend', newCardHtml);
+                
+                // Add event listeners to the new card only
+                const newCardEl = handCardsEl.querySelector(`[data-card-id="${newCard.id}"]`);
+                if (newCardEl) {
+                    this.addCardEventListeners(newCardEl, handCardsEl);
+                }
+                
+                // Check for auto-declaration after drawing
+                this.checkAutoDeclaration(hand);
+                return;
+            }
+        }
+
+        // Complete rebuild if it's not just adding a card
         const cardsHtml = hand.map(card => {
             return `<div class="card ${this.getCardSuitClass(card.suit)} ${card.isJoker ? 'joker' : ''}" 
-                         data-card-id="${card.id}">
+                         data-card-id="${card.id}"
+                         draggable="true">
                         ${card.displayName}
                     </div>`;
         }).join('');
 
         handCardsEl.innerHTML = cardsHtml;
         
-        // Add event listeners to cards (CSP-compliant)
+        // Set up auto-arrange button listener
+        this.setupAutoArrangeButton(hand);
+        
+        // Add event listeners to all cards
+        handCardsEl.querySelectorAll('.card').forEach(cardEl => {
+            this.addCardEventListeners(cardEl, handCardsEl);
+        });
+
+        // Check for auto-declaration
+        this.checkAutoDeclaration(hand);
+    }
+
+    /**
+     * Add event listeners to a card element
+     */
+    static addCardEventListeners(cardEl, handCardsEl) {
+        const cardId = cardEl.dataset.cardId;
+        
+        // Single click to select
+        cardEl.addEventListener('click', () => {
+            if (window.app) {
+                window.app.selectCard(cardEl, cardId);
+            }
+        });
+        
+        // Double click to discard
+        cardEl.addEventListener('dblclick', () => {
+            if (window.app) {
+                window.app.handleCardDiscard(cardId);
+            }
+        });
+
+        // Drag and drop for card arrangement
+        this.addDragAndDropListeners(cardEl, handCardsEl);
+    }
+
+    /**
+     * Set up auto-arrange button functionality
+     */
+    static setupAutoArrangeButton(hand) {
+        const autoArrangeBtn = document.getElementById('auto-arrange-btn');
+        if (!autoArrangeBtn) return;
+        
+        // Remove existing listeners
+        autoArrangeBtn.replaceWith(autoArrangeBtn.cloneNode(true));
+        const newBtn = document.getElementById('auto-arrange-btn');
+        
+        newBtn.addEventListener('click', () => {
+            this.autoArrangeCards(hand);
+        });
+    }
+
+    /**
+     * Auto-arrange cards by suit and rank
+     */
+    static autoArrangeCards(hand) {
+        if (!hand || !Array.isArray(hand)) return;
+        
+        const handCardsEl = document.getElementById('hand-cards');
+        if (!handCardsEl) return;
+        
+        // Sort cards by suit priority and then by rank
+        const suitPriority = { 'spades': 1, 'hearts': 2, 'diamonds': 3, 'clubs': 4, 'joker': 5 };
+        const rankPriority = { 
+            'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 
+            '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'Joker': 14 
+        };
+        
+        const sortedHand = [...hand].sort((a, b) => {
+            // Jokers go to the end
+            if (a.isJoker && !b.isJoker) return 1;
+            if (!a.isJoker && b.isJoker) return -1;
+            if (a.isJoker && b.isJoker) return 0;
+            
+            // Sort by suit first
+            const suitDiff = (suitPriority[a.suit] || 6) - (suitPriority[b.suit] || 6);
+            if (suitDiff !== 0) return suitDiff;
+            
+            // Then by rank
+            return (rankPriority[a.rank] || 15) - (rankPriority[b.rank] || 15);
+        });
+        
+        // Re-render with sorted order
+        const cardsHtml = sortedHand.map(card => {
+            return `<div class="card ${this.getCardSuitClass(card.suit)} ${card.isJoker ? 'joker' : ''}" 
+                         data-card-id="${card.id}"
+                         draggable="true">
+                        ${card.displayName}
+                    </div>`;
+        }).join('');
+        
+        handCardsEl.innerHTML = cardsHtml;
+        
+        // Re-add event listeners to the newly arranged cards
         handCardsEl.querySelectorAll('.card').forEach(cardEl => {
             const cardId = cardEl.dataset.cardId;
             
@@ -297,7 +425,146 @@ class UI {
                     window.app.handleCardDiscard(cardId);
                 }
             });
+
+            // Drag and drop for card arrangement
+            this.addDragAndDropListeners(cardEl, handCardsEl);
         });
+        
+        // Update app state to match new order
+        if (window.app && window.app.updateCardOrder) {
+            window.app.gameState.playerHand = sortedHand;
+        }
+        
+        // Show feedback
+        this.showMessage('Cards auto-arranged by suit and rank!', 'success');
+    }
+
+    /**
+     * Add drag and drop event listeners for card arrangement
+     */
+    static addDragAndDropListeners(cardEl, containerEl) {
+        // Store references globally for access across events
+        if (!window.dragDropState) {
+            window.dragDropState = {};
+        }
+
+        // Drag start
+        cardEl.addEventListener('dragstart', (e) => {
+            window.dragDropState.draggedCard = cardEl;
+            cardEl.classList.add('dragging');
+            
+            // Create placeholder
+            window.dragDropState.placeholder = document.createElement('div');
+            window.dragDropState.placeholder.className = 'card-placeholder';
+            window.dragDropState.placeholder.style.width = cardEl.offsetWidth + 'px';
+            window.dragDropState.placeholder.style.height = cardEl.offsetHeight + 'px';
+            
+            // Set drag data
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', cardEl.dataset.cardId);
+            
+            console.log('Drag started for card:', cardEl.dataset.cardId);
+            
+            // Insert placeholder initially
+            setTimeout(() => {
+                if (window.dragDropState.placeholder) {
+                    containerEl.insertBefore(window.dragDropState.placeholder, cardEl.nextSibling);
+                }
+            }, 0);
+        });
+
+        // Drag end
+        cardEl.addEventListener('dragend', (e) => {
+            if (window.dragDropState.draggedCard) {
+                window.dragDropState.draggedCard.classList.remove('dragging');
+            }
+            if (window.dragDropState.placeholder && window.dragDropState.placeholder.parentNode) {
+                window.dragDropState.placeholder.parentNode.removeChild(window.dragDropState.placeholder);
+            }
+            // Clean up
+            window.dragDropState = {};
+        });
+
+        // Drag over - handle on individual cards
+        cardEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            if (window.dragDropState.draggedCard && cardEl !== window.dragDropState.draggedCard && window.dragDropState.placeholder) {
+                const rect = cardEl.getBoundingClientRect();
+                const midpoint = rect.left + rect.width / 2;
+                
+                if (e.clientX < midpoint) {
+                    // Insert before this card
+                    if (cardEl.previousSibling !== window.dragDropState.placeholder) {
+                        containerEl.insertBefore(window.dragDropState.placeholder, cardEl);
+                    }
+                } else {
+                    // Insert after this card
+                    if (cardEl.nextSibling !== window.dragDropState.placeholder) {
+                        containerEl.insertBefore(window.dragDropState.placeholder, cardEl.nextSibling);
+                    }
+                }
+            }
+        });
+
+        // Drop on cards
+        cardEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            console.log('Drop event triggered on card:', cardEl.dataset.cardId);
+            this.handleCardDrop(containerEl);
+        });
+
+        // Set up container-level drag and drop (only once)
+        if (!containerEl.hasAttribute('data-drop-listeners')) {
+            containerEl.setAttribute('data-drop-listeners', 'true');
+            
+            // Container drag over (for empty spaces)
+            containerEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                
+                // If dragging over empty space, move placeholder to end
+                if (window.dragDropState.draggedCard && window.dragDropState.placeholder && 
+                    !e.target.classList.contains('card') && e.target === containerEl) {
+                    containerEl.appendChild(window.dragDropState.placeholder);
+                }
+            });
+
+            // Container drop
+            containerEl.addEventListener('drop', (e) => {
+                e.preventDefault();
+                console.log('Drop event triggered on container');
+                this.handleCardDrop(containerEl);
+            });
+        }
+    }
+
+    /**
+     * Handle the drop operation
+     */
+    static handleCardDrop(containerEl) {
+        if (window.dragDropState.draggedCard && window.dragDropState.placeholder && window.dragDropState.placeholder.parentNode) {
+            // Move the dragged card to the placeholder position
+            const draggedCard = window.dragDropState.draggedCard;
+            const placeholder = window.dragDropState.placeholder;
+            
+            // Insert the dragged card before the placeholder
+            placeholder.parentNode.insertBefore(draggedCard, placeholder);
+            
+            // Remove the placeholder
+            placeholder.parentNode.removeChild(placeholder);
+            
+            // Update the card order in the app state
+            if (window.app && window.app.updateCardOrder) {
+                window.app.updateCardOrder();
+            }
+            
+            // Show feedback
+            this.showMessage('Cards rearranged!', 'success');
+            
+            console.log('Card dropped successfully at new position');
+        }
     }
 
     /**
@@ -654,6 +921,245 @@ class UI {
             } else {
                 timerEl.style.setProperty('--timer-color', '#28a745'); // Green
             }
+        }
+    }
+
+    /**
+     * Check for automatic declaration when hand is valid
+     */
+    static checkAutoDeclaration(hand) {
+        if (!hand || hand.length !== 13) return;
+        
+        // Simple auto-validation logic
+        const autoArrangement = this.findValidArrangement(hand);
+        if (autoArrangement && autoArrangement.isValid) {
+            // Show auto-declaration option
+            this.showAutoDeclarationOption(autoArrangement);
+        }
+    }
+
+    /**
+     * Find a valid arrangement for the hand
+     */
+    static findValidArrangement(hand) {
+        if (!hand || hand.length !== 13) return null;
+        
+        try {
+            // Try to find valid sequences and sets
+            const arrangement = this.analyzeHandForDeclaration(hand);
+            return arrangement;
+        } catch (error) {
+            console.log('Error analyzing hand:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Analyze hand for potential declaration
+     */
+    static analyzeHandForDeclaration(hand) {
+        // Group cards by suit for sequences
+        const suitGroups = this.groupBySuit(hand);
+        const validGroups = [];
+        let usedCards = new Set();
+        let hasPureSequence = false;
+
+        // Try to find pure sequences first
+        Object.keys(suitGroups).forEach(suit => {
+            if (suit === 'jokers') return;
+            
+            const suitCards = suitGroups[suit].filter(card => !usedCards.has(card.id));
+            if (suitCards.length >= 3) {
+                const sequences = this.findSequencesInSuit(suitCards);
+                sequences.forEach(seq => {
+                    if (seq.length >= 3 && seq.every(card => !card.isJoker)) {
+                        validGroups.push({ type: 'pure_sequence', cards: seq });
+                        seq.forEach(card => usedCards.add(card.id));
+                        hasPureSequence = true;
+                    }
+                });
+            }
+        });
+
+        // Try to find impure sequences and sets with remaining cards
+        const remainingCards = hand.filter(card => !usedCards.has(card.id));
+        const additionalGroups = this.findSetsAndSequences(remainingCards);
+        validGroups.push(...additionalGroups);
+
+        // Check if all cards are grouped
+        const groupedCardCount = validGroups.reduce((count, group) => count + group.cards.length, 0);
+        const isComplete = groupedCardCount === 13;
+        
+        return {
+            isValid: isComplete && hasPureSequence,
+            groups: validGroups,
+            hasPureSequence: hasPureSequence,
+            remainingCards: hand.filter(card => !validGroups.some(group => 
+                group.cards.some(groupCard => groupCard.id === card.id)
+            ))
+        };
+    }
+
+    /**
+     * Group cards by suit
+     */
+    static groupBySuit(cards) {
+        const groups = { hearts: [], diamonds: [], clubs: [], spades: [], jokers: [] };
+        
+        cards.forEach(card => {
+            if (card.isJoker) {
+                groups.jokers.push(card);
+            } else {
+                groups[card.suit].push(card);
+            }
+        });
+
+        // Sort each suit by rank
+        Object.keys(groups).forEach(suit => {
+            if (suit !== 'jokers') {
+                groups[suit].sort((a, b) => {
+                    const aRank = a.rank === 1 ? 14 : a.rank; // Ace high
+                    const bRank = b.rank === 1 ? 14 : b.rank;
+                    return aRank - bRank;
+                });
+            }
+        });
+
+        return groups;
+    }
+
+    /**
+     * Find sequences in a suit
+     */
+    static findSequencesInSuit(suitCards) {
+        if (suitCards.length < 3) return [];
+        
+        const sorted = [...suitCards].sort((a, b) => a.rank - b.rank);
+        const sequences = [];
+        let currentSeq = [sorted[0]];
+        
+        for (let i = 1; i < sorted.length; i++) {
+            const current = sorted[i];
+            const previous = sorted[i - 1];
+            
+            if (current.rank === previous.rank + 1) {
+                currentSeq.push(current);
+            } else {
+                if (currentSeq.length >= 3) {
+                    sequences.push([...currentSeq]);
+                }
+                currentSeq = [current];
+            }
+        }
+        
+        if (currentSeq.length >= 3) {
+            sequences.push(currentSeq);
+        }
+        
+        return sequences;
+    }
+
+    /**
+     * Find sets and remaining sequences
+     */
+    static findSetsAndSequences(cards) {
+        const groups = [];
+        const used = new Set();
+        
+        // Group by rank for sets
+        const rankGroups = {};
+        cards.forEach(card => {
+            if (!used.has(card.id)) {
+                const rank = card.rank;
+                if (!rankGroups[rank]) rankGroups[rank] = [];
+                rankGroups[rank].push(card);
+            }
+        });
+        
+        // Find sets (3+ cards of same rank, different suits)
+        Object.values(rankGroups).forEach(rankCards => {
+            if (rankCards.length >= 3) {
+                const suits = new Set(rankCards.map(c => c.suit));
+                if (suits.size === rankCards.length) { // All different suits
+                    groups.push({ type: 'set', cards: rankCards });
+                    rankCards.forEach(card => used.add(card.id));
+                }
+            }
+        });
+        
+        return groups;
+    }
+
+    /**
+     * Show auto-declaration option to user
+     */
+    static showAutoDeclarationOption(arrangement) {
+        // Create or update auto-declare button
+        let autoBtn = document.getElementById('auto-declare-btn');
+        if (!autoBtn) {
+            autoBtn = document.createElement('button');
+            autoBtn.id = 'auto-declare-btn';
+            autoBtn.className = 'btn btn-success';
+            autoBtn.textContent = '🎉 Auto Declare & Win!';
+            autoBtn.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 2000;
+                padding: 15px 25px;
+                font-size: 16px;
+                font-weight: bold;
+                border: none;
+                border-radius: 8px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                animation: pulse 1s infinite;
+            `;
+            
+            // Add CSS animation if not exists
+            if (!document.getElementById('auto-declare-styles')) {
+                const style = document.createElement('style');
+                style.id = 'auto-declare-styles';
+                style.textContent = `
+                    @keyframes pulse {
+                        0% { transform: translate(-50%, -50%) scale(1); }
+                        50% { transform: translate(-50%, -50%) scale(1.05); }
+                        100% { transform: translate(-50%, -50%) scale(1); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            autoBtn.addEventListener('click', () => {
+                this.executeAutoDeclaration(arrangement);
+                autoBtn.remove();
+            });
+            
+            document.body.appendChild(autoBtn);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (autoBtn.parentNode) {
+                    autoBtn.remove();
+                }
+            }, 10000);
+        }
+    }
+
+    /**
+     * Execute automatic declaration
+     */
+    static executeAutoDeclaration(arrangement) {
+        if (window.app && arrangement.isValid) {
+            // Convert groups to the format expected by the server
+            const groups = arrangement.groups.map(group => 
+                group.cards.map(card => card.id)
+            );
+            
+            console.log('Auto-declaring with groups:', groups);
+            window.app.socket.emit('declare_hand', { groups });
+            
+            this.showMessage('🎉 Auto-declaration submitted! Checking for win...', 'success');
         }
     }
 }

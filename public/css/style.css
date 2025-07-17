@@ -270,8 +270,11 @@ body {
 #game-screen {
     background: linear-gradient(135deg, #0f4c75 0%, #3282b8 100%);
     flex-direction: column;
-    padding: 1rem;
-    gap: 1rem;
+    padding: 0.5rem;
+    gap: 0.3rem;
+    height: 100vh;
+    overflow-y: auto;
+    box-sizing: border-box;
 }
 
 .game-header {
@@ -279,9 +282,10 @@ body {
     justify-content: space-between;
     align-items: center;
     background: rgba(255, 255, 255, 0.1);
-    padding: 1rem 2rem;
-    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
     backdrop-filter: blur(10px);
+    min-height: 50px;
 }
 
 .game-info {
@@ -335,10 +339,10 @@ body {
     display: grid;
     grid-template-rows: 1fr auto 1fr;
     grid-template-columns: 1fr;
-    gap: 1rem;
-    padding: 1rem;
+    gap: 0.5rem;
+    padding: 0.5rem;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 20px;
+    border-radius: 15px;
     backdrop-filter: blur(10px);
 }
 
@@ -350,10 +354,10 @@ body {
 
 .player-slot {
     text-align: center;
-    padding: 1rem;
+    padding: 0.5rem;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    min-width: 120px;
+    border-radius: 8px;
+    min-width: 100px;
 }
 
 .player-info {
@@ -382,7 +386,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 4rem;
+    gap: 2rem;
 }
 
 .card-pile {
@@ -464,24 +468,119 @@ body {
 /* Player Hand */
 .player-hand {
     background: rgba(255, 255, 255, 0.05);
-    padding: 1rem;
-    border-radius: 15px;
+    padding: 0.5rem;
+    border-radius: 10px;
 }
 
 .hand-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.hand-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    border-radius: 4px;
+}
+
+.drag-hint {
+    text-align: center;
+    margin-top: 0.25rem;
+    opacity: 0.7;
+    font-size: 0.8rem;
 }
 
 .hand-cards {
     display: flex;
-    justify-content: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    max-width: 800px;
-    margin: 0 auto;
+    justify-content: flex-start;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 8px 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+    min-height: 100px;
+}
+
+/* Drag and Drop Styles */
+.card.dragging {
+    opacity: 0.4;
+    transform: scale(1.1) rotate(5deg);
+    z-index: 1000;
+    cursor: grabbing !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    transition: none;
+}
+
+.card:hover {
+    cursor: grab;
+}
+
+.card[draggable="true"]:hover:not(.dragging) {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    transition: all 0.2s ease;
+}
+
+.card-placeholder {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.3));
+    border: 2px dashed rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    margin: 0 3px;
+    width: 50px;
+    height: 70px;
+    display: inline-block;
+    vertical-align: top;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    animation: pulse 1s infinite alternate;
+    box-sizing: border-box;
+}
+
+@keyframes pulse {
+    from { border-color: rgba(255, 255, 255, 0.5); }
+    to { border-color: rgba(255, 255, 255, 1); }
+}
+
+/* Hand cards container improvements for drag and drop */
+.hand-cards::-webkit-scrollbar {
+    height: 6px;
+}
+
+.hand-cards::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.hand-cards::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.hand-cards::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.hand-cards:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Card sizing for single line display */
+.card {
+    min-width: 50px;
+    flex-shrink: 0;
 }
 
 /* Action Panel */
@@ -490,9 +589,10 @@ body {
     justify-content: space-between;
     align-items: center;
     background: rgba(255, 255, 255, 0.1);
-    padding: 1rem 2rem;
-    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
     backdrop-filter: blur(10px);
+    min-height: 50px;
 }
 
 .draw-actions {
