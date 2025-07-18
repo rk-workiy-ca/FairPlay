@@ -272,17 +272,26 @@ class UI {
             handCountEl.textContent = `${hand.length} cards`;
         }
 
+        // Use handOrder from app if available and valid
+        let orderedHand = hand;
+        if (window.app && window.app.handOrder && Array.isArray(window.app.handOrder)) {
+            const idToCard = Object.fromEntries(hand.map(card => [card.id, card]));
+            const ordered = window.app.handOrder.map(id => idToCard[id]).filter(Boolean);
+            // Only use if all cards are present
+            if (ordered.length === hand.length) {
+                orderedHand = ordered;
+            }
+        }
+
         // Check if this is just adding a new card (preserve arrangement)
         const currentCards = Array.from(handCardsEl.querySelectorAll('.card[data-card-id]'));
         const currentCardIds = currentCards.map(el => el.dataset.cardId);
-        const newHandIds = hand.map(card => card.id);
-        
+        const newHandIds = orderedHand.map(card => card.id);
         // If we're just adding one card, preserve the current arrangement
-        if (currentCardIds.length === hand.length - 1 && 
+        if (currentCardIds.length === orderedHand.length - 1 && 
             currentCardIds.every(id => newHandIds.includes(id))) {
-            
             // Find the new card
-            const newCard = hand.find(card => !currentCardIds.includes(card.id));
+            const newCard = orderedHand.find(card => !currentCardIds.includes(card.id));
             if (newCard) {
                 // Add the new card at the end
                 const newCardHtml = `<div class="card ${this.getCardSuitClass(newCard.suit)} ${newCard.isJoker ? 'joker' : ''}" 
@@ -291,21 +300,19 @@ class UI {
                                         ${newCard.displayName}
                                     </div>`;
                 handCardsEl.insertAdjacentHTML('beforeend', newCardHtml);
-                
                 // Add event listeners to the new card only
                 const newCardEl = handCardsEl.querySelector(`[data-card-id="${newCard.id}"]`);
                 if (newCardEl) {
                     this.addCardEventListeners(newCardEl, handCardsEl);
                 }
-                
                 // Check for auto-declaration after drawing
-                this.checkAutoDeclaration(hand);
+                this.checkAutoDeclaration(orderedHand);
                 return;
             }
         }
 
         // Complete rebuild if it's not just adding a card
-        const cardsHtml = hand.map(card => {
+        const cardsHtml = orderedHand.map(card => {
             return `<div class="card ${this.getCardSuitClass(card.suit)} ${card.isJoker ? 'joker' : ''}" 
                          data-card-id="${card.id}"
                          draggable="true">
@@ -314,17 +321,14 @@ class UI {
         }).join('');
 
         handCardsEl.innerHTML = cardsHtml;
-        
         // Set up auto-arrange button listener
-        this.setupAutoArrangeButton(hand);
-        
+        this.setupAutoArrangeButton(orderedHand);
         // Add event listeners to all cards
         handCardsEl.querySelectorAll('.card').forEach(cardEl => {
             this.addCardEventListeners(cardEl, handCardsEl);
         });
-
         // Check for auto-declaration
-        this.checkAutoDeclaration(hand);
+        this.checkAutoDeclaration(orderedHand);
     }
 
     /**

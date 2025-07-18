@@ -14,6 +14,10 @@ class FairPlayApp {
         this.hand = [];
         this.selectedCard = null;
         this.turnTimer = null;
+        this.handOrder = [];
+        this.lastAction = null;
+        this.lastDrawnCardId = null;
+        this.lastDiscardedCardId = null;
         
         this.init();
     }
@@ -80,11 +84,44 @@ class FairPlayApp {
         this.socket.on('hand_update', (data) => {
             console.log('Hand update:', data);
             this.hand = data.hand;
+            // Use handOrder to preserve arrangement
+            if (!this.handOrder || !Array.isArray(this.handOrder)) {
+                this.handOrder = this.hand.map(card => card.id);
+            }
+            if (this.lastAction === 'draw' && this.lastDrawnCardId) {
+                // Add the drawn card to the end if not present
+                if (!this.handOrder.includes(this.lastDrawnCardId)) {
+                    this.handOrder.push(this.lastDrawnCardId);
+                }
+            }
+            if (this.lastAction === 'discard' && this.lastDiscardedCardId) {
+                // Remove the discarded card from handOrder
+                this.handOrder = this.handOrder.filter(id => id !== this.lastDiscardedCardId);
+            }
+            // Remove any IDs not in the new hand (e.g., after server-side changes)
+            this.handOrder = this.handOrder.filter(id => this.hand.some(card => card.id === id));
+            // Add any new card IDs at the end (should only happen on draw)
+            this.hand.forEach(card => {
+                if (!this.handOrder.includes(card.id)) {
+                    this.handOrder.push(card.id);
+                }
+            });
+            // Reorder hand array
+            const idToCard = Object.fromEntries(this.hand.map(card => [card.id, card]));
+            const ordered = this.handOrder.map(id => idToCard[id]).filter(Boolean);
+            if (ordered.length === this.hand.length) {
+                this.hand = ordered;
+            }
             UI.updatePlayerHand(this.hand);
+            // Reset lastAction
+            this.lastAction = null;
+            this.lastDrawnCardId = null;
+            this.lastDiscardedCardId = null;
         });
 
         this.socket.on('card_drawn', (data) => {
             console.log('Card drawn:', data);
+            this.lastDrawnCardId = data.card.id;
             UI.showMessage(`Drew ${data.card.displayName} from ${data.source}`, 'info');
         });
 
@@ -233,6 +270,8 @@ class FairPlayApp {
             return;
         }
 
+        this.lastAction = 'draw';
+        this.lastDrawnCardId = null; // Will be set on card_drawn event
         console.log(`Drawing card from ${source}`);
         this.socket.emit('draw_card', { source });
     }
@@ -251,6 +290,8 @@ class FairPlayApp {
             return;
         }
 
+        this.lastAction = 'discard';
+        this.lastDiscardedCardId = cardId;
         console.log(`Discarding card: ${cardId}`);
         this.socket.emit('discard_card', { cardId });
         this.selectedCard = null;
@@ -556,6 +597,10 @@ class FairPlayApp {
             if (handCountEl) {
                 handCountEl.textContent = `${this.hand.length - 1} cards`;
             }
+            // Remove from handOrder
+            if (this.handOrder) {
+                this.handOrder = this.handOrder.filter(id => id !== cardId);
+            }
         }
 
         console.log(`Discarding card: ${cardId}`);
@@ -590,6 +635,10 @@ FairPlayApp.prototype.updateCardOrder = function() {
     // Update the game state
     if (reorderedHand.length === this.gameState.playerHand.length) {
         this.gameState.playerHand = reorderedHand;
+    }
+    // Also update handOrder for persistence
+    if (window.app) {
+        window.app.handOrder = newOrder;
     }
 };
 
