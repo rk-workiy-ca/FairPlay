@@ -52,7 +52,12 @@ function findOrCreateGame(maxPlayers = 4) {
   const newGame = new GameEngine(null, maxPlayers);
   
   // Set up state change callback for broadcasting
-  newGame.onStateChange = (game) => {
+  newGame.onStateChange = (game, eventType, eventData) => {
+    if (eventType === 'player_timeout') {
+      // Broadcast timeout event to all players
+      broadcastToGame(game.gameId, 'player_timeout', eventData);
+    }
+    // Always broadcast game state update
     broadcastToGame(game.gameId, 'game_state_update', game.getGameState());
   };
   
@@ -138,12 +143,14 @@ function checkAndStartGameWithBots(game) {
       if (game.gameState === 'waiting') {
         console.log(`Game ${game.gameId}: Wait time expired, filling with AI bots`);
         
-        // Add AI bots to fill the game (minimum 2 players including human)
+        // Add AI bots to fill ALL remaining seats up to maxPlayers
         const humanPlayers = game.players.filter(p => !p.isBot).length;
         if (humanPlayers >= 1) {
-          // Fill to minimum 2 players total
-          const totalPlayersNeeded = Math.max(2, humanPlayers + 1);
-          const botsNeeded = totalPlayersNeeded - game.players.length;
+          // Fill ALL remaining seats with AI bots
+          const botsNeeded = game.maxPlayers - game.players.length;
+          
+          console.log(`Game ${game.gameId}: Current players: ${game.players.length}/${game.maxPlayers} (${humanPlayers} human)`);
+          console.log(`Game ${game.gameId}: Need to add ${botsNeeded} AI bots to fill all seats`);
           
           if (botsNeeded > 0) {
             const addedBots = game.addAIBots(botsNeeded);

@@ -18,6 +18,7 @@ class FairPlayApp {
         this.lastAction = null;
         this.lastDrawnCardId = null;
         this.lastDiscardedCardId = null;
+        this.selectedPlayerCount = 4; // Default to 4 players
         
         this.init();
     }
@@ -142,6 +143,15 @@ class FairPlayApp {
             UI.showMessage(`${data.playerName} disconnected`, 'info');
         });
 
+        this.socket.on('player_timeout', (data) => {
+            console.log('Player timeout:', data);
+            if (data.playerId === this.playerId) {
+                UI.showMessage(`You timed out (${data.timeoutCount}/${data.remainingChances + data.timeoutCount}). ${data.remainingChances} chances left.`, 'warning');
+            } else {
+                UI.showMessage(`${data.playerName} timed out (${data.timeoutCount}/${data.remainingChances + data.timeoutCount}). Turn skipped.`, 'info');
+            }
+        });
+
         this.socket.on('declaration_result', (data) => {
             console.log('Declaration result:', data);
             this.handleDeclarationResult(data);
@@ -243,12 +253,13 @@ class FairPlayApp {
         }
 
         const selectedPlayers = document.querySelector('input[name="players"]:checked').value;
+        this.selectedPlayerCount = parseInt(selectedPlayers);
         
         console.log(`Joining game: ${playerName}, ${selectedPlayers} players`);
         
         this.socket.emit('join_game', {
             playerName: playerName,
-            maxPlayers: parseInt(selectedPlayers)
+            maxPlayers: this.selectedPlayerCount
         });
 
         // Disable the button to prevent multiple requests

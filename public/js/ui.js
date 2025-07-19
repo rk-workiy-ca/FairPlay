@@ -213,50 +213,62 @@ class UI {
     }
 
     /**
-     * Update other players display
+     * Update other players display with dynamic positioning
      */
     static updateOtherPlayers(players, currentPlayerId) {
+        const playersArea = document.getElementById('players-area');
+        if (!playersArea) return;
+
         const otherPlayers = players.filter(p => p.id !== currentPlayerId);
+        const totalPlayers = players.length;
         
-        for (let i = 0; i < 3; i++) {
-            const playerSlot = document.getElementById(`player-${i + 1}`);
-            if (!playerSlot) continue;
-
-            if (i < otherPlayers.length) {
-                const player = otherPlayers[i];
-                const playerNameEl = playerSlot.querySelector('.player-name');
-                const cardCountEl = playerSlot.querySelector('.card-count');
-                const playerCardsEl = playerSlot.querySelector('.player-cards');
-
-                if (playerNameEl) {
-                    playerNameEl.textContent = player.name;
-                }
-                
-                if (cardCountEl) {
-                    cardCountEl.textContent = `${player.handCount} cards`;
-                }
-
-                if (playerCardsEl) {
-                    // Show card backs for other players
-                    const cardsHtml = Array(player.handCount)
-                        .fill(0)
-                        .map(() => '<div class="card card-back"></div>')
-                        .join('');
-                    playerCardsEl.innerHTML = cardsHtml;
-                }
-
-                playerSlot.style.display = 'block';
-                
-                // Highlight if it's their turn
-                if (players.findIndex(p => p.id === player.id) === players.findIndex(p => p.id === currentPlayerId)) {
-                    playerSlot.classList.add('current-turn');
-                } else {
-                    playerSlot.classList.remove('current-turn');
-                }
-            } else {
-                playerSlot.style.display = 'none';
+        // Set the data-players attribute for CSS positioning
+        playersArea.setAttribute('data-players', totalPlayers);
+        
+        // Clear existing player slots
+        playersArea.innerHTML = '';
+        
+        // Create player slots dynamically
+        otherPlayers.forEach((player, index) => {
+            const playerSlot = document.createElement('div');
+            playerSlot.className = 'player-slot';
+            playerSlot.id = `player-${index + 1}`;
+            
+            const playerInfo = document.createElement('div');
+            playerInfo.className = 'player-info';
+            
+            const playerName = document.createElement('span');
+            playerName.className = 'player-name';
+            playerName.textContent = player.name;
+            
+            const cardCount = document.createElement('span');
+            cardCount.className = 'card-count';
+            cardCount.textContent = `${player.handCount} cards`;
+            
+            const playerCards = document.createElement('div');
+            playerCards.className = 'player-cards fanned';
+            
+            // Create fanned-out card backs for other players
+            const cardsHtml = Array(player.handCount)
+                .fill(0)
+                .map(() => '<div class="card card-back"></div>')
+                .join('');
+            playerCards.innerHTML = cardsHtml;
+            
+            playerInfo.appendChild(playerName);
+            playerInfo.appendChild(cardCount);
+            playerSlot.appendChild(playerInfo);
+            playerSlot.appendChild(playerCards);
+            
+            // Highlight if it's their turn
+            const currentTurnIndex = window.app && window.app.gameState ? window.app.gameState.currentTurn : 0;
+            const playerIndex = players.findIndex(p => p.id === player.id);
+            if (playerIndex === currentTurnIndex) {
+                playerSlot.classList.add('current-turn');
             }
-        }
+            
+            playersArea.appendChild(playerSlot);
+        });
     }
 
     /**

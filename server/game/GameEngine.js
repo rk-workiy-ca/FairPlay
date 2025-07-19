@@ -476,6 +476,16 @@ class GameEngine {
       const remainingChances = player.maxTimeouts - player.timeoutCount;
       console.log(`Player ${player.name} timed out (${player.timeoutCount}/${player.maxTimeouts}), skipping turn. ${remainingChances} chances left`);
       
+      // Notify about timeout before moving to next turn
+      if (this.onStateChange) {
+        this.onStateChange(this, 'player_timeout', {
+          playerId: player.id,
+          playerName: player.name,
+          timeoutCount: player.timeoutCount,
+          remainingChances: remainingChances
+        });
+      }
+      
       // Move to next player's turn
       this._nextTurn();
     }
