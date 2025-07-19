@@ -317,6 +317,7 @@ body {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
     overflow: hidden;
+    position: relative;
 }
 
 .turn-timer::after {
@@ -324,13 +325,11 @@ body {
     display: block;
     height: 100%;
     background: linear-gradient(45deg, #28a745, #ffd700);
-    width: 100%;
-    animation: timer-countdown 30s linear;
-}
-
-@keyframes timer-countdown {
-    from { width: 100%; }
-    to { width: 0%; }
+    width: var(--timer-width, 100%);
+    transition: width 0.1s ease;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 /* Game Table */

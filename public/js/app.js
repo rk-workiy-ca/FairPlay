@@ -19,6 +19,7 @@ class FairPlayApp {
         this.lastDrawnCardId = null;
         this.lastDiscardedCardId = null;
         this.selectedPlayerCount = 4; // Default to 4 players
+        this.isDropped = false; // Track if player has been dropped
         
         this.init();
     }
@@ -76,15 +77,69 @@ class FairPlayApp {
             UI.startWaitTimer();
         });
 
-        this.socket.on('game_state_update', (gameState) => {
-            console.log('Game state update:', gameState);
-            this.gameState = gameState;
+        this.socket.on('game_state_update', (data) => {
+            console.log('Game state update received:', data);
+            const previousTurn = this.gameState ? this.gameState.currentTurn : null;
+            const newTurn = data.currentTurn;
+            const wasMyTurn = previousTurn !== null && this.gameState && this.gameState.players[previousTurn] && this.gameState.players[previousTurn].id === this.playerId;
+            const isMyTurn = data.players[newTurn] && data.players[newTurn].id === this.playerId;
+            
+            console.log(`Turn change: Previous turn: ${previousTurn}, New turn: ${newTurn}`);
+            console.log(`Was my turn: ${wasMyTurn}, Is my turn: ${isMyTurn}`);
+            console.log(`Current timer state: ${!!this.turnTimer}`);
+            
+            this.gameState = data;
             this.updateGameDisplay();
+            
+            // ALWAYS stop timer first on any state update - NO EXCEPTIONS
+            console.log('=== FORCING TIMER STOP ===');
+            this.stopTurnTimer();
+            this.forceResetTimer();
+            
+            // Double-check timer is stopped
+            if (this.turnTimer) {
+                console.log('ERROR: Timer still running after stop! Forcing stop again...');
+                clearInterval(this.turnTimer);
+                this.turnTimer = null;
+            }
+            
+            // If turn changed from me to someone else, ensure timer is stopped
+            if (wasMyTurn && !isMyTurn) {
+                console.log('=== TURN CHANGED FROM ME TO SOMEONE ELSE ===');
+                console.log('Ensuring timer is completely stopped...');
+                this.stopTurnTimer();
+                this.forceResetTimer();
+                UI.disablePlayerActions();
+            }
+            
+            // If it's not my turn, ensure timer is stopped
+            if (!isMyTurn) {
+                console.log('=== NOT MY TURN ===');
+                console.log('Ensuring timer is stopped and actions disabled...');
+                this.stopTurnTimer();
+                this.forceResetTimer();
+                UI.disablePlayerActions();
+            }
+            
+            // Only start timer if it's actually my turn
+            if (isMyTurn) {
+                console.log('=== IT IS MY TURN ===');
+                console.log('Starting timer after delay...');
+                UI.enablePlayerActions();
+                setTimeout(() => {
+                    console.log('Starting timer now...');
+                    this.synchronizeTimer();
+                }, 100);
+            }
+            
+            console.log(`Timer state after update: ${!!this.turnTimer}`);
         });
 
+        // Handle hand updates (when player draws or discards)
         this.socket.on('hand_update', (data) => {
-            console.log('Hand update:', data);
+            console.log('Hand updated:', data);
             this.hand = data.hand;
+            
             // Use handOrder to preserve arrangement
             if (!this.handOrder || !Array.isArray(this.handOrder)) {
                 this.handOrder = this.hand.map(card => card.id);
@@ -113,7 +168,17 @@ class FairPlayApp {
             if (ordered.length === this.hand.length) {
                 this.hand = ordered;
             }
-            UI.updatePlayerHand(this.hand);
+            
+            // Update the hand display with the arranged cards
+            this.updateHandDisplay();
+            
+            // If we just got a hand update and it's not our turn anymore, stop the timer
+            if (this.gameState && !this.isMyTurn()) {
+                console.log('Hand updated but not my turn - stopping timer');
+                this.stopTurnTimer();
+                this.forceResetTimer();
+            }
+            
             // Reset lastAction
             this.lastAction = null;
             this.lastDrawnCardId = null;
@@ -126,16 +191,32 @@ class FairPlayApp {
             UI.showMessage(`Drew ${data.card.displayName} from ${data.source}`, 'info');
         });
 
+        // Handle card discarded event
         this.socket.on('card_discarded', (data) => {
             console.log('Card discarded:', data);
-            if (data.playerId !== this.playerId) {
-                UI.showMessage(`${data.playerName} discarded ${data.discardedCard.displayName}`, 'info');
+            // Update discard pile display
+            UI.updateDiscardPile(data.discardedCard);
+            
+            // If this was our discard, immediately stop timer
+            if (data.playerId === this.playerId) {
+                console.log('I discarded a card - stopping timer immediately');
+                this.stopTurnTimer();
+                this.forceResetTimer();
             }
         });
 
         this.socket.on('player_dropped', (data) => {
             console.log('Player dropped:', data);
-            UI.showMessage(`${data.playerName} dropped from the game`, 'info');
+            if (data.playerId === this.playerId) {
+                // Current player was dropped - log them out
+                this.isDropped = true;
+                UI.showMessage(`You were dropped from the game due to timeouts.`, 'error');
+                setTimeout(() => {
+                    this.goHome();
+                }, 3000);
+            } else {
+                UI.showMessage(`${data.playerName} dropped from the game`, 'info');
+            }
         });
 
         this.socket.on('player_disconnected', (data) => {
@@ -146,9 +227,13 @@ class FairPlayApp {
         this.socket.on('player_timeout', (data) => {
             console.log('Player timeout:', data);
             if (data.playerId === this.playerId) {
-                UI.showMessage(`You timed out (${data.timeoutCount}/${data.remainingChances + data.timeoutCount}). ${data.remainingChances} chances left.`, 'warning');
+                if (data.timeoutCount >= 3) {
+                    UI.showMessage(`You timed out 3 times and were automatically dropped from the game.`, 'error');
+                } else {
+                    UI.showMessage(`You timed out (${data.timeoutCount}/3). ${data.remainingChances} chances left. Turn skipped.`, 'warning');
+                }
             } else {
-                UI.showMessage(`${data.playerName} timed out (${data.timeoutCount}/${data.remainingChances + data.timeoutCount}). Turn skipped.`, 'info');
+                UI.showMessage(`${data.playerName} timed out (${data.timeoutCount}/3). Turn skipped.`, 'info');
             }
         });
 
@@ -163,14 +248,59 @@ class FairPlayApp {
             this.showScreen('game');
             // Stop the wait timer
             UI.hideWaitTimer();
+            // Immediately update the game display to show other players
+            this.updateGameDisplay();
+            
+            // ALWAYS stop and reset timer first
+            console.log('Game started - stopping and resetting timer');
+            this.stopTurnTimer();
+            this.forceResetTimer();
+            
+            // Start periodic timer check
+            this.startTimerCheck();
+            
             // Request current hand
             this.socket.emit('get_hand');
+            
+            // Only start timer if it's our turn
+            if (this.isMyTurn()) {
+                console.log('Game started and it is my turn - starting timer');
+                setTimeout(() => {
+                    this.synchronizeTimer();
+                }, 200);
+            } else {
+                console.log('Game started but not my turn - timer will remain stopped');
+            }
+            
             UI.showMessage('Game started! Your turn.', 'success');
         });
 
         this.socket.on('game_ended', (data) => {
             console.log('Game ended:', data);
             this.handleGameEnd(data);
+        });
+
+        // Handle turn timer start from backend
+        this.socket.on('turn_timer_start', (data) => {
+            console.log('=== TURN TIMER START FROM BACKEND ===', data);
+            
+            // Only start timer if it's our turn
+            if (data.currentPlayerId === this.playerId) {
+                console.log('Starting synchronized timer for my turn');
+                this.startSynchronizedTimer(data.turnStartTime, data.timeLimit);
+            } else {
+                console.log('Not my turn, ensuring timer is stopped');
+                this.stopTurnTimer();
+                this.forceResetTimer();
+            }
+        });
+
+        // Handle turn timer stop from backend
+        this.socket.on('turn_timer_stop', (data) => {
+            console.log('=== TURN TIMER STOP FROM BACKEND ===', data);
+            console.log('Stopping timer due to backend timer stop');
+            this.stopTurnTimer();
+            this.forceResetTimer();
         });
     }
 
@@ -270,20 +400,24 @@ class FairPlayApp {
     /**
      * Draw a card from deck or discard pile
      */
-    drawCard(source) {
+    drawCard(source = 'deck') {
         if (!this.isMyTurn()) {
             UI.showMessage("It's not your turn", 'error');
             return;
         }
 
         if (this.hand.length >= 14) {
-            UI.showMessage("You must discard a card first", 'error');
+            UI.showMessage("You already have 14 cards. Discard one first.", 'error');
             return;
         }
 
-        this.lastAction = 'draw';
-        this.lastDrawnCardId = null; // Will be set on card_drawn event
         console.log(`Drawing card from ${source}`);
+        this.lastAction = 'draw';
+        
+        // Immediately stop timer when drawing
+        console.log('Drawing card - stopping timer');
+        this.stopTurnTimer();
+        
         this.socket.emit('draw_card', { source });
     }
 
@@ -301,9 +435,14 @@ class FairPlayApp {
             return;
         }
 
+        console.log(`Discarding card: ${cardId}`);
         this.lastAction = 'discard';
         this.lastDiscardedCardId = cardId;
-        console.log(`Discarding card: ${cardId}`);
+        
+        // Immediately stop timer when discarding
+        console.log('Discarding card - stopping timer');
+        this.stopTurnTimer();
+        
         this.socket.emit('discard_card', { cardId });
         this.selectedCard = null;
     }
@@ -416,11 +555,15 @@ class FairPlayApp {
         this.gameId = null;
         this.hand = [];
         this.selectedCard = null;
+        this.isDropped = false; // Reset dropped status
         
         if (this.turnTimer) {
             clearInterval(this.turnTimer);
             this.turnTimer = null;
         }
+        
+        // Stop periodic timer check
+        this.stopTimerCheck();
 
         // Re-enable join button
         document.getElementById('join-game-btn').disabled = false;
@@ -441,32 +584,92 @@ class FairPlayApp {
     }
 
     /**
-     * Update game display based on current game state
+     * Force reset timer display
+     */
+    forceResetTimer() {
+        const timerElement = document.getElementById('turn-timer');
+        if (timerElement) {
+            timerElement.style.setProperty('--timer-width', '100%');
+            console.log('Force reset timer display to 100%');
+            console.log('Timer element found and width set to 100%');
+        } else {
+            console.error('Timer element not found for force reset!');
+        }
+    }
+
+    /**
+     * Synchronize timer with game state
+     */
+    synchronizeTimer() {
+        if (!this.gameState || this.currentScreen !== 'game') {
+            console.log('SynchronizeTimer: Not in game or no game state');
+            return;
+        }
+        
+        const isMyTurn = this.isMyTurn();
+        const currentPlayer = this.gameState.players[this.gameState.currentTurn];
+        console.log(`Synchronizing timer - Is my turn: ${isMyTurn}, Is dropped: ${this.isDropped}, Current player: ${currentPlayer ? currentPlayer.name : 'unknown'}`);
+        
+        // ALWAYS stop the timer first to ensure clean reset
+        console.log('Stopping timer before synchronization');
+        this.stopTurnTimer();
+        
+        // Force reset timer display
+        this.forceResetTimer();
+        
+        // If player is dropped, disable all actions
+        if (this.isDropped) {
+            console.log('Player is dropped, disabling actions');
+            UI.disablePlayerActions();
+            return;
+        }
+        
+        // If it's our turn, start the timer and enable actions
+        if (isMyTurn) {
+            console.log('Starting timer for my turn');
+            UI.enablePlayerActions();
+            // Small delay to ensure UI is updated before starting timer
+            setTimeout(() => {
+                console.log('Starting timer after delay');
+                this.startTurnTimer();
+            }, 100);
+        } else {
+            // If it's not our turn, disable actions and ensure timer is stopped
+            console.log('Not my turn, disabling actions and ensuring timer is stopped');
+            UI.disablePlayerActions();
+            // Double-check timer is stopped
+            if (this.turnTimer) {
+                console.log('Timer was still running, stopping it again');
+                this.stopTurnTimer();
+            }
+        }
+    }
+
+    /**
+     * Update hand display
+     */
+    updateHandDisplay() {
+        if (this.hand && this.hand.length > 0) {
+            UI.updatePlayerHand(this.hand);
+        }
+    }
+
+    /**
+     * Update game display
      */
     updateGameDisplay() {
         if (!this.gameState) return;
 
-        // Update game screen if we're in playing state
-        if (this.gameState.gameState === 'playing' && this.currentScreen === 'waiting') {
-            this.showScreen('game');
-            // Request current hand
-            this.socket.emit('get_hand');
-        }
-
-        // Update UI elements
-        if (this.currentScreen === 'game') {
-            UI.updateGameState(this.gameState, this.playerId);
-            
-            // Update turn-specific UI
-            if (this.isMyTurn()) {
-                UI.enablePlayerActions();
-                this.startTurnTimer();
-            } else {
-                UI.disablePlayerActions();
-                this.stopTurnTimer();
-            }
-        } else if (this.currentScreen === 'waiting') {
-            UI.updateWaitingScreen(this.gameState);
+        // Update game state display
+        UI.updateGameState(this.gameState, this.playerId);
+        
+        // Update turn display
+        UI.updateTurnDisplay(this.gameState, this.playerId);
+        
+        // Update hand count
+        const handCountEl = document.getElementById('hand-count');
+        if (handCountEl) {
+            handCountEl.textContent = `${this.hand ? this.hand.length : 0} cards`;
         }
     }
 
@@ -474,184 +677,30 @@ class FairPlayApp {
      * Start turn timer
      */
     startTurnTimer() {
+        console.log('=== STARTING TURN TIMER ===');
+        
+        // Double-check it's actually our turn before starting timer
+        if (!this.isMyTurn()) {
+            console.log('ERROR: Not my turn, refusing to start timer');
+            return;
+        }
+        
+        // Ensure any existing timer is stopped first
         this.stopTurnTimer();
         
-        let timeLeft = 60;
+        let timeLeft = 10; // 10 seconds per turn (matching backend)
         const timerElement = document.getElementById('turn-timer');
         
+        if (!timerElement) {
+            console.error('ERROR: Timer element not found!');
+            return;
+        }
+        
+        // Reset timer display
+        timerElement.style.setProperty('--timer-width', '100%');
+        console.log('Timer display reset to 100%');
+        
+        console.log('Creating timer interval...');
         this.turnTimer = setInterval(() => {
             timeLeft--;
-            
-            if (timerElement) {
-                timerElement.style.setProperty('--timer-width', `${(timeLeft / 60) * 100}%`);
-            }
-            
-            if (timeLeft <= 0) {
-                this.stopTurnTimer();
-                UI.showMessage("Time's up! You were automatically dropped.", 'error');
-            }
-        }, 1000);
-    }
-
-    /**
-     * Stop turn timer
-     */
-    stopTurnTimer() {
-        if (this.turnTimer) {
-            clearInterval(this.turnTimer);
-            this.turnTimer = null;
-        }
-    }
-
-    /**
-     * Show a specific screen
-     */
-    showScreen(screenName) {
-        console.log(`Switching to screen: ${screenName}`);
-        
-        // Hide all screens
-        document.querySelectorAll('.screen').forEach(screen => {
-            screen.classList.remove('active');
-        });
-
-        // Show target screen
-        const targetScreen = document.getElementById(`${screenName}-screen`);
-        if (targetScreen) {
-            targetScreen.classList.add('active');
-            this.currentScreen = screenName;
-        }
-    }
-
-    /**
-     * Handle card selection
-     */
-    selectCard(cardElement, cardId) {
-        // Remove previous selection
-        document.querySelectorAll('.card.selected').forEach(card => {
-            card.classList.remove('selected');
-        });
-
-        // Select new card
-        if (this.selectedCard === cardId) {
-            this.selectedCard = null;
-        } else {
-            this.selectedCard = cardId;
-            cardElement.classList.add('selected');
-        }
-    }
-
-    /**
-     * Make a declaration (automatic or manual)
-     */
-    makeDeclaration() {
-        if (!this.isMyTurn()) {
-            UI.showMessage("It's not your turn", 'error');
-            return;
-        }
-
-        if (this.hand.length !== 13) {
-            UI.showMessage("You must have exactly 13 cards to declare", 'error');
-            return;
-        }
-
-        // Try automatic arrangement first
-        const autoArrangement = UI.findValidArrangement(this.hand);
-        if (autoArrangement && autoArrangement.isValid) {
-            // Auto-declare if valid arrangement found
-            const groups = autoArrangement.groups.map(group => 
-                group.cards.map(card => card.id)
-            );
-            
-            console.log('Auto-declaring with groups:', groups);
-            this.socket.emit('declare_hand', { groups });
-            UI.showMessage('🎉 Auto-declaration submitted!', 'success');
-        } else {
-            // Fallback to manual declaration modal
-            UI.openDeclarationModal(this.hand);
-        }
-    }
-
-    /**
-     * Handle card discard with improved feedback
-     */
-    handleCardDiscard(cardId) {
-        if (!this.isMyTurn()) {
-            UI.showMessage("It's not your turn", 'error');
-            return;
-        }
-
-        if (this.hand.length <= 13) {
-            UI.showMessage("Draw a card first, then double-click a card to discard it", 'error');
-            return;
-        }
-
-        // Find and remove card from local hand for immediate UI feedback
-        const cardIndex = this.hand.findIndex(card => card.id === cardId);
-        if (cardIndex !== -1) {
-            const discardedCard = this.hand[cardIndex];
-            
-            // Remove card from UI immediately
-            const cardEl = document.querySelector(`[data-card-id="${cardId}"]`);
-            if (cardEl) {
-                cardEl.style.transition = 'all 0.3s ease';
-                cardEl.style.transform = 'scale(0)';
-                cardEl.style.opacity = '0';
-                setTimeout(() => {
-                    if (cardEl.parentNode) {
-                        cardEl.parentNode.removeChild(cardEl);
-                    }
-                }, 300);
-            }
-            
-            // Update hand count immediately
-            const handCountEl = document.getElementById('hand-count');
-            if (handCountEl) {
-                handCountEl.textContent = `${this.hand.length - 1} cards`;
-            }
-            // Remove from handOrder
-            if (this.handOrder) {
-                this.handOrder = this.handOrder.filter(id => id !== cardId);
-            }
-        }
-
-        console.log(`Discarding card: ${cardId}`);
-        this.socket.emit('discard_card', { cardId });
-        this.selectedCard = null;
-    }
-}
-
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new FairPlayApp();
-});
-
-// Add updateCardOrder method to FairPlayApp prototype
-FairPlayApp.prototype.updateCardOrder = function() {
-    // Get current card order from DOM
-    const handCardsEl = document.getElementById('hand-cards');
-    if (!handCardsEl || !this.gameState || !this.gameState.playerHand) return;
-    
-    const cardElements = handCardsEl.querySelectorAll('.card[data-card-id]');
-    const newOrder = Array.from(cardElements).map(el => el.dataset.cardId);
-    
-    // Reorder the hand array to match DOM order
-    const reorderedHand = [];
-    newOrder.forEach(cardId => {
-        const card = this.gameState.playerHand.find(c => c.id === cardId);
-        if (card) {
-            reorderedHand.push(card);
-        }
-    });
-    
-    // Update the game state
-    if (reorderedHand.length === this.gameState.playerHand.length) {
-        this.gameState.playerHand = reorderedHand;
-    }
-    // Also update handOrder for persistence
-    if (window.app) {
-        window.app.handOrder = newOrder;
-    }
-};
-
-// Export for use in other files
-window.FairPlayApp = FairPlayApp; 
+            console.log(`

@@ -19,7 +19,8 @@ class GameEngine {
     this.validator = null;
     this.aiService = new AIService(); // Initialize AI service
     this.turnTimer = null;
-    this.turnTimeLimit = 60000; // 60 seconds per turn
+    this.turnTimeLimit = 10000; // 10 seconds per turn (matching frontend)
+    this.turnStartTime = null; // Track when turn started for synchronization
     this.gameStartTime = null;
     this.gameEndTime = null;
     this.winner = null;
@@ -419,18 +420,34 @@ class GameEngine {
    * @private
    */
   _nextTurn() {
-    do {
-      this.currentTurn = (this.currentTurn + 1) % this.players.length;
-    } while (this.players[this.currentTurn].hasDropped);
-
-    // Check if only one player remains
-    const activePlayers = this.players.filter(p => !p.hasDropped);
-    if (activePlayers.length === 1) {
-      this._endGame(activePlayers[0].id, { isValid: true, totalPoints: 0 });
-      return;
+    // Stop current turn timer
+    if (this.turnTimer) {
+      clearTimeout(this.turnTimer);
+      this.turnTimer = null;
+    }
+    
+    // Send timer stop event to frontend
+    if (this.onStateChange) {
+      this.onStateChange(this, 'turn_timer_stop', {
+        currentPlayerId: this.players[this.currentTurn] ? this.players[this.currentTurn].id : null
+      });
     }
 
+    // Move to next player
+    this.currentTurn = (this.currentTurn + 1) % this.players.length;
+    
+    // Skip dropped players
+    while (this.players[this.currentTurn].hasDropped) {
+      this.currentTurn = (this.currentTurn + 1) % this.players.length;
+    }
+
+    // Start timer for new turn
     this._startTurnTimer();
+
+    // Notify about turn change
+    if (this.onStateChange) {
+      this.onStateChange(this, 'game_state_update', this.getGameState());
+    }
   }
 
   /**
@@ -443,6 +460,18 @@ class GameEngine {
     }
 
     const currentPlayer = this.players[this.currentTurn];
+    
+    // Record turn start time for synchronization
+    this.turnStartTime = Date.now();
+    
+    // Send timer start event to frontend
+    if (this.onStateChange) {
+      this.onStateChange(this, 'turn_timer_start', {
+        turnStartTime: this.turnStartTime,
+        timeLimit: this.turnTimeLimit,
+        currentPlayerId: currentPlayer ? currentPlayer.id : null
+      });
+    }
     
     // If current player is an AI bot, handle their turn automatically
     if (currentPlayer && currentPlayer.isBot) {
@@ -514,6 +543,16 @@ class GameEngine {
       console.log(`Player ${player.name} auto-dropped after ${player.timeoutCount} timeouts with ${dropType} penalty (${player.score} points)`);
     } else {
       console.log(`Player ${player.name} dropped with ${dropType} penalty (${player.score} points)`);
+    }
+
+    // Notify about player drop
+    if (this.onStateChange) {
+      this.onStateChange(this, 'player_dropped', {
+        playerId: player.id,
+        playerName: player.name,
+        dropType: dropType,
+        isAutoDropped: isAutoDropped
+      });
     }
 
     // Check if we need to end the game
@@ -692,7 +731,7 @@ class GameEngine {
         const declaration = this.validator.validateDeclaration(aiPlayer.hand);
         if (declaration.isValid) {
           console.log(`AI ${aiPlayer.name} declares with valid hand!`);
-          this.declareGame(aiPlayer.id, aiPlayer.hand.map(card => card.id));
+          this.declareHand(aiPlayer.id, aiPlayer.hand.map(card => card.id));
           return;
         }
       }

@@ -39,34 +39,26 @@ const waitingPlayers = []; // Players waiting for a game
  * @returns {GameEngine} Game instance
  */
 function findOrCreateGame(maxPlayers = 4) {
-  // Look for a waiting game with same player count
-  for (let [gameId, game] of games.entries()) {
-    if (game.gameState === 'waiting' && 
-        game.maxPlayers === maxPlayers && 
-        game.players.length < maxPlayers) {
+  // Clean up finished games first
+  cleanupFinishedGames();
+  
+  // Find an available game
+  for (const [gameId, game] of games) {
+    if (game.gameState === 'waiting' && game.players.length < game.maxPlayers) {
       return game;
     }
   }
-
-  // Create new game if none found
-  const newGame = new GameEngine(null, maxPlayers);
   
-  // Set up state change callback for broadcasting
-  newGame.onStateChange = (game, eventType, eventData) => {
-    if (eventType === 'player_timeout') {
-      // Broadcast timeout event to all players
-      broadcastToGame(game.gameId, 'player_timeout', eventData);
-    }
-    // Always broadcast game state update
-    broadcastToGame(game.gameId, 'game_state_update', game.getGameState());
+  // Create new game if none available
+  const game = new GameEngine(null, maxPlayers);
+  
+  // Set up state change handler for timer events
+  game.onStateChange = (gameInstance, event, data) => {
+    handleGameStateChange(gameInstance, event, data);
   };
   
-  games.set(newGame.gameId, newGame);
-  
-  // Cleanup finished games periodically
-  setInterval(() => cleanupFinishedGames(), 300000); // 5 minutes
-  
-  return newGame;
+  games.set(game.gameId, game);
+  return game;
 }
 
 /**
@@ -97,10 +89,7 @@ function broadcastToGame(gameId, event, data) {
 
   game.players.forEach(player => {
     if (player.socketId) {
-      const socket = io.sockets.sockets.get(player.socketId);
-      if (socket) {
-        socket.emit(event, data);
-      }
+      io.to(player.socketId).emit(event, data);
     }
   });
 }
@@ -220,6 +209,21 @@ function checkAndStartGameWithBots(game) {
         }
       });
     }
+  }
+}
+
+// Handle timer events from game engine
+function handleGameStateChange(game, event, data) {
+  if (event === 'game_state_update') {
+    broadcastToGame(game.gameId, 'game_state_update', data);
+  } else if (event === 'player_timeout') {
+    broadcastToGame(game.gameId, 'player_timeout', data);
+  } else if (event === 'player_dropped') {
+    broadcastToGame(game.gameId, 'player_dropped', data);
+  } else if (event === 'turn_timer_start') {
+    broadcastToGame(game.gameId, 'turn_timer_start', data);
+  } else if (event === 'turn_timer_stop') {
+    broadcastToGame(game.gameId, 'turn_timer_stop', data);
   }
 }
 

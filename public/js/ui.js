@@ -145,6 +145,29 @@ class UI {
     }
 
     /**
+     * Update turn display
+     */
+    static updateTurnDisplay(gameState, currentPlayerId) {
+        // Update current turn indicator
+        const currentTurnEl = document.getElementById('current-turn');
+        if (currentTurnEl && gameState.players[gameState.currentTurn]) {
+            const currentPlayer = gameState.players[gameState.currentTurn];
+            currentTurnEl.textContent = currentPlayer.id === currentPlayerId 
+                ? "Your Turn" 
+                : `${currentPlayer.name}'s Turn`;
+        }
+
+        // Update game status
+        const gameStatusEl = document.getElementById('game-status');
+        if (gameStatusEl && gameState.players[gameState.currentTurn]) {
+            const currentPlayer = gameState.players[gameState.currentTurn];
+            gameStatusEl.textContent = currentPlayer.id === currentPlayerId 
+                ? "Your turn - Draw a card" 
+                : `Waiting for ${currentPlayer.name}`;
+        }
+    }
+
+    /**
      * Update game state display
      */
     static updateGameState(gameState, currentPlayerId) {
@@ -160,16 +183,8 @@ class UI {
             wildJokerEl.textContent = `Wild: ${gameState.wildJoker.displayName}`;
         }
 
-        // Update current turn
-        const currentTurnEl = document.getElementById('current-turn');
-        if (currentTurnEl) {
-            const currentPlayer = gameState.players[gameState.currentTurn];
-            if (currentPlayer) {
-                currentTurnEl.textContent = currentPlayer.id === currentPlayerId 
-                    ? "Your Turn" 
-                    : `${currentPlayer.name}'s Turn`;
-            }
-        }
+        // Update turn display
+        this.updateTurnDisplay(gameState, currentPlayerId);
 
         // Update deck count
         const deckCountEl = document.getElementById('deck-count');
@@ -182,17 +197,6 @@ class UI {
 
         // Update other players
         this.updateOtherPlayers(gameState.players, currentPlayerId);
-
-        // Update game status
-        const gameStatusEl = document.getElementById('game-status');
-        if (gameStatusEl) {
-            const currentPlayer = gameState.players[gameState.currentTurn];
-            if (currentPlayer) {
-                gameStatusEl.textContent = currentPlayer.id === currentPlayerId 
-                    ? "Your turn - Draw a card" 
-                    : `Waiting for ${currentPlayer.name}`;
-            }
-        }
     }
 
     /**
@@ -265,6 +269,8 @@ class UI {
             const playerIndex = players.findIndex(p => p.id === player.id);
             if (playerIndex === currentTurnIndex) {
                 playerSlot.classList.add('current-turn');
+            } else {
+                playerSlot.classList.remove('current-turn');
             }
             
             playersArea.appendChild(playerSlot);
