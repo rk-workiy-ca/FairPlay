@@ -305,6 +305,136 @@ class FairPlayApp {
     }
 
     /**
+     * Start synchronized timer based on backend data
+     */
+    startSynchronizedTimer(turnStartTime, timeLimit) {
+        console.log('=== STARTING SYNCHRONIZED TIMER ===');
+        
+        // Stop any existing timer
+        this.stopTurnTimer();
+        
+        const timerElement = document.getElementById('turn-timer');
+        if (!timerElement) {
+            console.error('Timer element not found!');
+            return;
+        }
+        
+        // Calculate elapsed time since turn started
+        const now = Date.now();
+        const elapsed = now - turnStartTime;
+        const remaining = Math.max(0, timeLimit - elapsed);
+        
+        console.log(`Turn started at: ${turnStartTime}, Now: ${now}, Elapsed: ${elapsed}ms, Remaining: ${remaining}ms`);
+        
+        // If time is already up, don't start timer
+        if (remaining <= 0) {
+            console.log('Time already expired, not starting timer');
+            this.forceResetTimer();
+            return;
+        }
+        
+        // Calculate initial percentage
+        const initialPercentage = (remaining / timeLimit) * 100;
+        timerElement.style.setProperty('--timer-width', `${initialPercentage}%`);
+        console.log(`Initial timer percentage: ${initialPercentage}%`);
+        
+        // Start countdown timer
+        this.turnTimer = setInterval(() => {
+            const currentTime = Date.now();
+            const currentElapsed = currentTime - turnStartTime;
+            const currentRemaining = Math.max(0, timeLimit - currentElapsed);
+            const percentage = (currentRemaining / timeLimit) * 100;
+            
+            console.log(`Timer update - Remaining: ${currentRemaining}ms, Percentage: ${percentage}%`);
+            
+            if (timerElement) {
+                timerElement.style.setProperty('--timer-width', `${percentage}%`);
+            }
+            
+            if (currentRemaining <= 0) {
+                console.log('Timer reached 0, stopping');
+                this.stopTurnTimer();
+            }
+        }, 100); // Update every 100ms for smooth animation
+        
+        console.log('=== SYNCHRONIZED TIMER STARTED ===');
+    }
+
+    /**
+     * Start turn timer (legacy method - now uses synchronized timer)
+     */
+    startTurnTimer() {
+        console.log('=== STARTING TURN TIMER ===');
+        
+        // Double-check it's actually our turn before starting timer
+        if (!this.isMyTurn()) {
+            console.log('ERROR: Not my turn, refusing to start timer');
+            return;
+        }
+        
+        // Ensure any existing timer is stopped first
+        this.stopTurnTimer();
+        
+        let timeLeft = 10; // 10 seconds per turn (matching backend)
+        const timerElement = document.getElementById('turn-timer');
+        
+        if (!timerElement) {
+            console.error('ERROR: Timer element not found!');
+            return;
+        }
+        
+        // Reset timer display
+        timerElement.style.setProperty('--timer-width', '100%');
+        console.log('Timer display reset to 100%');
+        
+        console.log('Creating timer interval...');
+        this.turnTimer = setInterval(() => {
+            timeLeft--;
+            console.log(`Timer: ${timeLeft} seconds left`);
+            
+            if (timerElement) {
+                const percentage = Math.max(0, (timeLeft / 10) * 100);
+                timerElement.style.setProperty('--timer-width', `${percentage}%`);
+            }
+            
+            if (timeLeft <= 0) {
+                console.log('Timer reached 0, stopping');
+                this.stopTurnTimer();
+                // Don't show message here - let the server handle timeout
+            }
+        }, 1000);
+        
+        console.log('=== TIMER STARTED SUCCESSFULLY ===');
+    }
+
+    /**
+     * Stop turn timer
+     */
+    stopTurnTimer() {
+        console.log('=== STOPPING TURN TIMER ===');
+        
+        if (this.turnTimer) {
+            console.log('Clearing timer interval...');
+            clearInterval(this.turnTimer);
+            this.turnTimer = null;
+            console.log('Timer interval cleared');
+        } else {
+            console.log('No timer interval to clear');
+        }
+        
+        // Force reset timer display
+        const timerElement = document.getElementById('turn-timer');
+        if (timerElement) {
+            timerElement.style.setProperty('--timer-width', '100%');
+            console.log('Timer display reset to 100% after stopping');
+        } else {
+            console.log('Timer element not found for reset');
+        }
+        
+        console.log('=== TIMER STOPPED ===');
+    }
+
+    /**
      * Setup event listeners for UI elements
      */
     setupEventListeners() {
@@ -674,33 +804,224 @@ class FairPlayApp {
     }
 
     /**
-     * Start turn timer
+     * Show a specific screen
      */
-    startTurnTimer() {
-        console.log('=== STARTING TURN TIMER ===');
+    showScreen(screenName) {
+        console.log(`Switching to screen: ${screenName}`);
         
-        // Double-check it's actually our turn before starting timer
+        // Hide all screens
+        document.querySelectorAll('.screen').forEach(screen => {
+            screen.classList.remove('active');
+        });
+
+        // Show target screen
+        const targetScreen = document.getElementById(`${screenName}-screen`);
+        if (targetScreen) {
+            targetScreen.classList.add('active');
+            this.currentScreen = screenName;
+        }
+    }
+
+    /**
+     * Handle card selection
+     */
+    selectCard(cardElement, cardId) {
+        // Remove previous selection
+        document.querySelectorAll('.card.selected').forEach(card => {
+            card.classList.remove('selected');
+        });
+
+        // Select new card
+        if (this.selectedCard === cardId) {
+            this.selectedCard = null;
+        } else {
+            this.selectedCard = cardId;
+            cardElement.classList.add('selected');
+        }
+    }
+
+    /**
+     * Make a declaration (automatic or manual)
+     */
+    makeDeclaration() {
         if (!this.isMyTurn()) {
-            console.log('ERROR: Not my turn, refusing to start timer');
+            UI.showMessage("It's not your turn", 'error');
             return;
         }
-        
-        // Ensure any existing timer is stopped first
-        this.stopTurnTimer();
-        
-        let timeLeft = 10; // 10 seconds per turn (matching backend)
+
+        if (this.hand.length !== 13) {
+            UI.showMessage("You must have exactly 13 cards to declare", 'error');
+            return;
+        }
+
+        // Try automatic arrangement first
+        const autoArrangement = UI.findValidArrangement(this.hand);
+        if (autoArrangement && autoArrangement.isValid) {
+            // Auto-declare if valid arrangement found
+            const groups = autoArrangement.groups.map(group => 
+                group.cards.map(card => card.id)
+            );
+            
+            console.log('Auto-declaring with groups:', groups);
+            this.socket.emit('declare_hand', { groups });
+            UI.showMessage('🎉 Auto-declaration submitted!', 'success');
+        } else {
+            // Fallback to manual declaration modal
+            UI.openDeclarationModal(this.hand);
+        }
+    }
+
+    /**
+     * Handle card discard with improved feedback
+     */
+    handleCardDiscard(cardId) {
+        if (!this.isMyTurn()) {
+            UI.showMessage("It's not your turn", 'error');
+            return;
+        }
+
+        if (this.hand.length <= 13) {
+            UI.showMessage("Draw a card first, then double-click a card to discard it", 'error');
+            return;
+        }
+
+        // Find and remove card from local hand for immediate UI feedback
+        const cardIndex = this.hand.findIndex(card => card.id === cardId);
+        if (cardIndex !== -1) {
+            const discardedCard = this.hand[cardIndex];
+            
+            // Remove card from UI immediately
+            const cardEl = document.querySelector(`[data-card-id="${cardId}"]`);
+            if (cardEl) {
+                cardEl.style.transition = 'all 0.3s ease';
+                cardEl.style.transform = 'scale(0)';
+                cardEl.style.opacity = '0';
+                setTimeout(() => {
+                    if (cardEl.parentNode) {
+                        cardEl.parentNode.removeChild(cardEl);
+                    }
+                }, 300);
+            }
+            
+            // Update hand count immediately
+            const handCountEl = document.getElementById('hand-count');
+            if (handCountEl) {
+                handCountEl.textContent = `${this.hand.length - 1} cards`;
+            }
+            // Remove from handOrder
+            if (this.handOrder) {
+                this.handOrder = this.handOrder.filter(id => id !== cardId);
+            }
+        }
+
+        console.log(`Discarding card: ${cardId}`);
+        this.socket.emit('discard_card', { cardId });
+        this.selectedCard = null;
+    }
+
+    /**
+     * Start periodic timer check
+     */
+    startTimerCheck() {
+        // Check timer every 500ms to ensure it stays synchronized
+        this.timerCheckInterval = setInterval(() => {
+            if (this.currentScreen === 'game' && this.gameState) {
+                const isMyTurn = this.isMyTurn();
+                const timerElement = document.getElementById('turn-timer');
+                
+                console.log(`Timer check: Is my turn: ${isMyTurn}, Timer running: ${!!this.turnTimer}`);
+                
+                // If it's my turn but no timer is running, restart it
+                if (isMyTurn && !this.turnTimer && timerElement) {
+                    console.log('Timer check: Restarting timer for my turn');
+                    this.startTurnTimer();
+                }
+                // If it's not my turn but timer is running, stop it immediately
+                else if (!isMyTurn && this.turnTimer) {
+                    console.log('Timer check: ERROR - Timer running when not my turn! Stopping immediately...');
+                    this.stopTurnTimer();
+                    this.forceResetTimer();
+                    UI.disablePlayerActions();
+                }
+                // If it's not my turn, ensure timer display is reset
+                else if (!isMyTurn) {
+                    this.forceResetTimer();
+                }
+            }
+        }, 500); // Check every 500ms for faster response
+    }
+
+    /**
+     * Stop periodic timer check
+     */
+    stopTimerCheck() {
+        if (this.timerCheckInterval) {
+            clearInterval(this.timerCheckInterval);
+            this.timerCheckInterval = null;
+        }
+    }
+
+    /**
+     * Test timer functionality (for debugging)
+     */
+    testTimer() {
+        console.log('=== TESTING TIMER ===');
         const timerElement = document.getElementById('turn-timer');
-        
-        if (!timerElement) {
-            console.error('ERROR: Timer element not found!');
-            return;
+        if (timerElement) {
+            console.log('Timer element found');
+            console.log('Current timer width:', timerElement.style.getPropertyValue('--timer-width'));
+            
+            // Test setting different widths
+            timerElement.style.setProperty('--timer-width', '50%');
+            console.log('Set timer to 50%');
+            
+            setTimeout(() => {
+                timerElement.style.setProperty('--timer-width', '25%');
+                console.log('Set timer to 25%');
+            }, 1000);
+            
+            setTimeout(() => {
+                timerElement.style.setProperty('--timer-width', '100%');
+                console.log('Reset timer to 100%');
+            }, 2000);
+        } else {
+            console.error('Timer element not found!');
         }
-        
-        // Reset timer display
-        timerElement.style.setProperty('--timer-width', '100%');
-        console.log('Timer display reset to 100%');
-        
-        console.log('Creating timer interval...');
-        this.turnTimer = setInterval(() => {
-            timeLeft--;
-            console.log(`
+    }
+}
+
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new FairPlayApp();
+});
+
+// Add updateCardOrder method to FairPlayApp prototype
+FairPlayApp.prototype.updateCardOrder = function() {
+    // Get current card order from DOM
+    const handCardsEl = document.getElementById('hand-cards');
+    if (!handCardsEl || !this.gameState || !this.gameState.playerHand) return;
+    
+    const cardElements = handCardsEl.querySelectorAll('.card[data-card-id]');
+    const newOrder = Array.from(cardElements).map(el => el.dataset.cardId);
+    
+    // Reorder the hand array to match DOM order
+    const reorderedHand = [];
+    newOrder.forEach(cardId => {
+        const card = this.gameState.playerHand.find(c => c.id === cardId);
+        if (card) {
+            reorderedHand.push(card);
+        }
+    });
+    
+    // Update the game state
+    if (reorderedHand.length === this.gameState.playerHand.length) {
+        this.gameState.playerHand = reorderedHand;
+    }
+    // Also update handOrder for persistence
+    if (window.app) {
+        window.app.handOrder = newOrder;
+    }
+};
+
+// Export for use in other files
+window.FairPlayApp = FairPlayApp;
