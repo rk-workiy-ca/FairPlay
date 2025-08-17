@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FairPlay Rummy - POC</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=7">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -61,7 +61,7 @@
                 <div id="waiting-players"></div>
                 <div class="waiting-spinner"></div>
                 <div id="wait-timer" class="wait-timer" style="display: none;">
-                    <p>AI bot will join in: <span id="countdown-time">--</span> seconds</p>
+                    <p>Players will join in: <span id="countdown-time">--</span> seconds</p>
                     <div class="timer-bar">
                         <div id="timer-progress" class="timer-progress"></div>
                     </div>
@@ -81,7 +81,10 @@
             </div>
             <div class="turn-info">
                 <span id="current-turn" class="current-turn"></span>
-                <div id="turn-timer" class="turn-timer"></div>
+                <div class="timer-container">
+                    <div id="turn-timer" class="turn-timer"></div>
+                    <span id="timer-countdown" class="timer-countdown">30</span>
+                </div>
             </div>
             <div class="actions">
                 <button id="drop-btn" class="btn btn-danger">Drop</button>
@@ -120,9 +123,27 @@
                         <span id="hand-count" class="card-count">13 cards</span>
                     </div>
                 </div>
-                <div id="hand-cards" class="hand-cards"></div>
+                <!-- Grouping Controls -->
+                <div class="grouping-controls">
+                    <button id="auto-group-btn" class="auto-group-button" title="Automatically group cards by color and type">
+                        🔄 Auto Group
+                    </button>
+                    <button id="group-selected-btn" class="group-button" disabled title="Group selected cards">
+                        📦 Group Selected
+                    </button>
+                    <span id="selected-count" class="selected-count">0 selected</span>
+                    <button id="clear-groups-btn" class="btn btn-small btn-secondary" title="Clear all groups">
+                        🗑️ Clear Groups
+                    </button>
+                </div>
+                
+                <!-- Combined Cards Container -->
+                <div id="combined-cards" class="combined-cards-container">
+                    <div id="card-groups" class="card-groups-container"></div>
+                    <div id="hand-cards" class="hand-cards"></div>
+                </div>
                 <div class="drag-hint">
-                    <small>💡 Drag cards to rearrange them manually</small>
+                    <small>💡 Drag cards to rearrange • Click to select • Group similar cards</small>
                 </div>
             </div>
         </div>
@@ -192,9 +213,9 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/game.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/app.js"></script>
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+    <script src="js/game.js?v=3"></script>
+    <script src="js/ui.js?v=8"></script>
+    <script src="js/app.js?v=16"></script>
 </body>
 </html> 

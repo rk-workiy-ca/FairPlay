@@ -152,9 +152,16 @@ class UI {
         const currentTurnEl = document.getElementById('current-turn');
         if (currentTurnEl && gameState.players[gameState.currentTurn]) {
             const currentPlayer = gameState.players[gameState.currentTurn];
-            currentTurnEl.textContent = currentPlayer.id === currentPlayerId 
-                ? "Your Turn" 
-                : `${currentPlayer.name}'s Turn`;
+            const isMyTurn = currentPlayer.id === currentPlayerId;
+            
+            currentTurnEl.textContent = isMyTurn ? "🎯 YOUR TURN 🎯" : `${currentPlayer.name}'s Turn`;
+            
+            // Add/remove special class for your turn
+            if (isMyTurn) {
+                currentTurnEl.classList.add('your-turn');
+            } else {
+                currentTurnEl.classList.remove('your-turn');
+            }
         }
 
         // Update game status
@@ -162,8 +169,8 @@ class UI {
         if (gameStatusEl && gameState.players[gameState.currentTurn]) {
             const currentPlayer = gameState.players[gameState.currentTurn];
             gameStatusEl.textContent = currentPlayer.id === currentPlayerId 
-                ? "Your turn - Draw a card" 
-                : `Waiting for ${currentPlayer.name}`;
+                ? "Your turn - Draw a card to continue" 
+                : `Waiting for ${currentPlayer.name}...`;
         }
     }
 
@@ -202,18 +209,23 @@ class UI {
     /**
      * Update discard pile
      */
-    static updateDiscardPile(deckInfo) {
+    static updateDiscardPile(cardData) {
         const discardCardEl = document.getElementById('discard-card');
-        if (!discardCardEl || !deckInfo) return;
+        if (!discardCardEl) return;
 
-        if (deckInfo.topDiscardCard) {
-            const card = deckInfo.topDiscardCard;
-            discardCardEl.className = `card ${this.getCardSuitClass(card.suit)}`;
-            discardCardEl.textContent = card.displayName;
-        } else {
-            discardCardEl.className = 'card empty';
-            discardCardEl.textContent = 'Empty';
+        if (cardData) {
+            // Handle both formats: direct card data or deckInfo with topDiscardCard
+            const card = cardData.topDiscardCard || cardData;
+            if (card) {
+                discardCardEl.className = `card ${this.getCardSuitClass(card.suit)}`;
+                discardCardEl.textContent = card.displayName;
+                return;
+            }
         }
+        
+        // Fallback to empty
+        discardCardEl.className = 'card empty';
+        discardCardEl.textContent = 'Empty';
     }
 
     /**
@@ -287,7 +299,12 @@ class UI {
 
         const handCountEl = document.getElementById('hand-count');
         if (handCountEl) {
-            handCountEl.textContent = `${hand.length} cards`;
+            // Include grouped cards in total count
+            const handCards = hand.length;
+            const groupedCards = window.app && window.app.cardGroups ? 
+                window.app.cardGroups.reduce((total, group) => total + group.cards.length, 0) : 0;
+            const totalCards = handCards + groupedCards;
+            handCountEl.textContent = `${totalCards} cards`;
         }
 
         // Use handOrder from app if available and valid
@@ -355,22 +372,82 @@ class UI {
     static addCardEventListeners(cardEl, handCardsEl) {
         const cardId = cardEl.dataset.cardId;
         
-        // Single click to select
+        // Single click to select for grouping
         cardEl.addEventListener('click', () => {
+            console.log('Card clicked:', cardId);
             if (window.app) {
-                window.app.selectCard(cardEl, cardId);
+                console.log('Calling toggleCardSelection for:', cardId);
+                window.app.toggleCardSelection(cardId);
+            } else {
+                console.error('window.app not available');
             }
         });
         
-        // Double click to discard
+        // Double click to discard (if it's your turn and you've drawn)
         cardEl.addEventListener('dblclick', () => {
+            console.log('Card double-clicked:', cardId);
             if (window.app) {
-                window.app.handleCardDiscard(cardId);
+                console.log('Is my turn:', window.app.isMyTurn(), 'Last drawn card:', window.app.lastDrawnCardId);
+                // Check if it's the player's turn and they've drawn a card
+                if (window.app.isMyTurn() && window.app.lastDrawnCardId) {
+                    console.log('Attempting to discard card:', cardId);
+                    window.app.handleCardDiscard(cardId);
+                } else {
+                    // If not ready to discard, show helpful message
+                    if (!window.app.isMyTurn()) {
+                        UI.showMessage("Wait for your turn to discard cards", 'info');
+                    } else if (!window.app.lastDrawnCardId) {
+                        UI.showMessage("Draw a card first before discarding", 'info');
+                    }
+                }
+            } else {
+                console.error('window.app not available for double-click');
             }
         });
 
         // Drag and drop for card arrangement
         this.addDragAndDropListeners(cardEl, handCardsEl);
+    }
+
+    /**
+     * Add drag and drop listeners to card elements
+     */
+    static addDragAndDropListeners(cardEl, containerEl) {
+        const cardId = cardEl.dataset.cardId;
+
+        // Make card draggable
+        cardEl.draggable = true;
+
+        // Handle drag start
+        cardEl.addEventListener('dragstart', (e) => {
+            console.log('Drag started for card:', cardId);
+            e.dataTransfer.setData('text/plain', cardId);
+            e.dataTransfer.effectAllowed = 'move';
+            cardEl.classList.add('dragging');
+        });
+
+        // Handle drag end
+        cardEl.addEventListener('dragend', (e) => {
+            console.log('Drag ended for card:', cardId);
+            cardEl.classList.remove('dragging');
+        });
+
+        // Handle drop zone for card rearrangement within hand
+        cardEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        cardEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const draggedCardId = e.dataTransfer.getData('text/plain');
+            const targetCardId = cardId;
+            
+            if (draggedCardId !== targetCardId && window.app) {
+                console.log(`Rearranging: ${draggedCardId} → ${targetCardId}`);
+                window.app.rearrangeCards(draggedCardId, targetCardId);
+            }
+        });
     }
 
     /**
@@ -418,6 +495,12 @@ class UI {
             // Then by rank
             return (rankPriority[a.rank] || 15) - (rankPriority[b.rank] || 15);
         });
+        
+        // Update the handOrder in the app to persist the arrangement
+        if (window.app && window.app.handOrder) {
+            window.app.handOrder = sortedHand.map(card => card.id);
+            console.log('Updated handOrder after auto-arrange:', window.app.handOrder);
+        }
         
         // Re-render with sorted order
         const cardsHtml = sortedHand.map(card => {

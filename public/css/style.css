@@ -309,6 +309,36 @@ body {
     display: block;
     font-weight: 600;
     margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    color: #ffd700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.current-turn.your-turn {
+    color: #00ff88;
+    background: rgba(0, 255, 136, 0.1);
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 2px solid rgba(0, 255, 136, 0.3);
+    animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% { 
+        box-shadow: 0 0 5px rgba(0, 255, 136, 0.3);
+        transform: scale(1);
+    }
+    50% { 
+        box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
+        transform: scale(1.02);
+    }
+}
+
+.timer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 .turn-timer {
@@ -330,6 +360,31 @@ body {
     position: absolute;
     top: 0;
     left: 0;
+}
+
+.timer-countdown {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #ffd700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    min-width: 20px;
+    text-align: center;
+}
+
+.timer-countdown.warning {
+    color: #ff6b6b;
+    animation: pulse-warning 1s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
 }
 
 /* Game Table */
@@ -666,9 +721,210 @@ body {
 }
 
 .card.selected {
-    border-color: #ffd700;
+    border-color: #00ff88;
     transform: translateY(-10px);
-    box-shadow: 0 10px 30px rgba(255, 215, 0, 0.5);
+    box-shadow: 0 12px 24px rgba(0, 255, 136, 0.4);
+    z-index: 15;
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(255, 255, 255, 0.95));
+}
+
+.card.selected:hover {
+    transform: translateY(-12px);
+    box-shadow: 0 16px 32px rgba(0, 255, 136, 0.6);
+}
+
+/* Card Grouping Styles */
+.combined-cards-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 15px;
+    margin: 10px 0;
+    padding: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    min-height: 120px;
+}
+
+.card-groups-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 15px;
+    margin: 0;
+    padding: 0;
+    flex-wrap: nowrap;
+}
+
+.card-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    margin: 0;
+    padding: 8px;
+    border: 2px dashed #333;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
+    min-height: 100px;
+    flex-shrink: 0;
+}
+
+.card-group.valid {
+    border-color: #00ff88;
+    background: rgba(0, 255, 136, 0.1);
+}
+
+.card-group.invalid {
+    border-color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.1);
+}
+
+.card-group-label {
+    position: absolute;
+    bottom: -15px;
+    left: 10px;
+    background: #1a1a1a;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.card-group.valid .card-group-label {
+    background: #00ff88;
+    color: #000;
+}
+
+.card-group.invalid .card-group-label {
+    background: #ff6b6b;
+    color: #fff;
+}
+
+.card-group .card {
+    margin: 0;
+    transform: scale(0.9);
+}
+
+.card-group .card:hover {
+    transform: scale(0.95) translateY(-3px);
+}
+
+.grouping-controls {
+    display: flex !important;
+    gap: 10px;
+    margin: 10px 0;
+    align-items: center;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #333;
+}
+
+.group-button, .auto-group-button {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.group-button:hover, .auto-group-button:hover {
+    background: linear-gradient(135deg, #764ba2, #667eea);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.group-button:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.selected-count {
+    color: #00ff88;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.ungroup-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #ff6b6b;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 11;
+}
+
+.ungroup-btn:hover {
+    background: #ff5252;
+    transform: scale(1.1);
+}
+
+.add-to-group-btn {
+    position: absolute;
+    top: -10px;
+    right: 15px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 11;
+    font-weight: bold;
+}
+
+.add-to-group-btn:hover {
+    background: #45a049;
+    transform: scale(1.1);
+}
+
+/* Drag and Drop Styles */
+.card.dragging {
+    opacity: 0.5;
+    transform: scale(1.05);
+    z-index: 1000;
+}
+
+.card-group.drag-over {
+    border: 3px dashed #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+    transform: scale(1.02);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .card-back {

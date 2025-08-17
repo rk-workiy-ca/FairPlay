@@ -151,6 +151,15 @@ class Deck {
   }
 
   /**
+   * Return a card to the top of the deck (used when timeout occurs)
+   * @param {Card} card - Card to return to deck
+   */
+  returnCardToDeck(card) {
+    this.cards.unshift(card); // Add to beginning of deck
+    console.log(`Returned ${card.getDisplayName()} to deck`);
+  }
+
+  /**
    * Get all cards of same rank as wild joker
    * @returns {Card[]} Array of cards that can act as wild jokers
    */

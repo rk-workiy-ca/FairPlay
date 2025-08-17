@@ -45,7 +45,11 @@ function findOrCreateGame(maxPlayers = 4) {
   // Find an available game
   for (const [gameId, game] of games) {
     if (game.gameState === 'waiting' && game.players.length < game.maxPlayers) {
-      return game;
+      // Only allow joining games that either have no players or have at least one human player
+      const humanPlayers = game.players.filter(p => !p.isBot);
+      if (game.players.length === 0 || humanPlayers.length > 0) {
+        return game;
+      }
     }
   }
   
@@ -224,6 +228,17 @@ function handleGameStateChange(game, event, data) {
     broadcastToGame(game.gameId, 'turn_timer_start', data);
   } else if (event === 'turn_timer_stop') {
     broadcastToGame(game.gameId, 'turn_timer_stop', data);
+  } else if (event === 'hand_update') {
+    // Send hand update to specific player
+    if (data.playerId) {
+      sendToPlayer(data.playerId, 'hand_update', { hand: data.hand });
+    }
+  } else if (event === 'card_returned') {
+    // Broadcast card returned event
+    broadcastToGame(game.gameId, 'card_returned', data);
+  } else if (event === 'card_discarded') {
+    // Broadcast card discarded event
+    broadcastToGame(game.gameId, 'card_discarded', data);
   }
 }
 

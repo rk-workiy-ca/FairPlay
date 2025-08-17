@@ -19,7 +19,7 @@ class GameEngine {
     this.validator = null;
     this.aiService = new AIService(); // Initialize AI service
     this.turnTimer = null;
-    this.turnTimeLimit = 10000; // 10 seconds per turn (matching frontend)
+    this.turnTimeLimit = 30000; // 30 seconds per turn for human players
     this.turnStartTime = null; // Track when turn started for synchronization
     this.gameStartTime = null;
     this.gameEndTime = null;
@@ -63,7 +63,10 @@ class GameEngine {
       isConnected: true,
       joinedAt: new Date(),
       timeoutCount: 0, // Track number of timeouts
-      maxTimeouts: 3   // Allow 3 timeouts before auto-drop
+      maxTimeouts: 3,   // Allow 3 timeouts before auto-drop
+      hasDrawnCard: false, // Track if player has drawn but not discarded
+      lastDrawnCardId: null, // Track the last drawn card's ID
+      lastDrawnCardSource: null // Track where the last card was drawn from
     };
 
     this.players.push(player);
@@ -158,6 +161,17 @@ class GameEngine {
     }
 
     const player = validation.player;
+    
+    // Prevent drawing if player already drew a card this turn
+    if (player.hasDrawnCard) {
+      return { success: false, reason: 'You have already drawn a card this turn' };
+    }
+    
+    // Prevent drawing if player already has 14 cards
+    if (player.hand.length >= 14) {
+      return { success: false, reason: 'You already have the maximum number of cards (14)' };
+    }
+    
     let drawnCard = null;
 
     if (source === 'deck') {
@@ -178,6 +192,9 @@ class GameEngine {
     }
 
     player.hand.push(drawnCard);
+    player.hasDrawnCard = true;
+    player.lastDrawnCardId = drawnCard.id;
+    player.lastDrawnCardSource = source; // Track where the card was drawn from
     
     // Reset timeout count on successful action
     player.timeoutCount = 0;
@@ -212,9 +229,11 @@ class GameEngine {
 
     const discardedCard = player.hand.splice(cardIndex, 1)[0];
     this.deck.addToDiscardPile(discardedCard);
-
     // Reset timeout count on successful action
     player.timeoutCount = 0;
+    player.hasDrawnCard = false;
+    player.lastDrawnCardId = null;
+    player.lastDrawnCardSource = null;
 
     console.log(`Player ${player.name} discarded ${discardedCard.getDisplayName()}`);
 
@@ -495,7 +514,45 @@ class GameEngine {
    */
   _handlePlayerTimeout(player) {
     player.timeoutCount += 1;
-    
+
+    // If player has drawn but not discarded, return the last drawn card
+    if (player.hasDrawnCard && player.hand.length === 14 && player.lastDrawnCardId) {
+      const cardIndex = player.hand.findIndex(card => card.id === player.lastDrawnCardId);
+      if (cardIndex !== -1) {
+        const returnedCard = player.hand.splice(cardIndex, 1)[0];
+        
+        // Return card to its source
+        if (player.lastDrawnCardSource === 'discard') {
+          // Return to top of discard pile
+          this.deck.addToDiscardPile(returnedCard);
+        } else {
+          // Return to deck (add to top)
+          this.deck.returnCardToDeck(returnedCard);
+        }
+        
+        player.hasDrawnCard = false;
+        player.lastDrawnCardId = null;
+        player.lastDrawnCardSource = null;
+        
+        if (this.onStateChange) {
+          // Send hand_update to the affected player
+          this.onStateChange(this, 'hand_update', {
+            playerId: player.id,
+            hand: player.hand.map(card => card.toJSON())
+          });
+          
+          // Notify about card return
+          this.onStateChange(this, 'card_returned', {
+            playerId: player.id,
+            playerName: player.name,
+            returnedCard: returnedCard.toJSON(),
+            returnedTo: player.lastDrawnCardSource || 'deck'
+          });
+        }
+        console.log(`Player ${player.name} timed out after drawing, returned ${returnedCard.getDisplayName()} to ${player.lastDrawnCardSource || 'deck'}`);
+      }
+    }
+
     if (player.timeoutCount >= player.maxTimeouts) {
       // Player has reached maximum timeouts, auto-drop them
       console.log(`Player ${player.name} timed out ${player.timeoutCount} times, auto-dropping`);
@@ -504,7 +561,6 @@ class GameEngine {
       // Player still has chances left, skip their turn
       const remainingChances = player.maxTimeouts - player.timeoutCount;
       console.log(`Player ${player.name} timed out (${player.timeoutCount}/${player.maxTimeouts}), skipping turn. ${remainingChances} chances left`);
-      
       // Notify about timeout before moving to next turn
       if (this.onStateChange) {
         this.onStateChange(this, 'player_timeout', {
@@ -514,7 +570,6 @@ class GameEngine {
           remainingChances: remainingChances
         });
       }
-      
       // Move to next player's turn
       this._nextTurn();
     }
@@ -557,6 +612,8 @@ class GameEngine {
 
     // Check if we need to end the game
     const activePlayers = this.players.filter(p => !p.hasDropped);
+    const activeHumanPlayers = activePlayers.filter(p => !p.isBot);
+    
     if (activePlayers.length === 1) {
       const winner = activePlayers[0];
       console.log(`Game ${this.gameId} ended. Winner: ${winner.name}`);
@@ -564,6 +621,10 @@ class GameEngine {
     } else if (activePlayers.length === 0) {
       console.log(`Game ${this.gameId} ended. No winner - all players dropped`);
       this._endGame(null, { isValid: false, reason: 'All players dropped' });
+    } else if (activeHumanPlayers.length === 0) {
+      // End game if no human players remain, even if AI bots are still active
+      console.log(`Game ${this.gameId} ended. No human players remaining - only AI bots left`);
+      this._endGame(null, { isValid: false, reason: 'No human players remaining' });
     } else {
       // Continue with next turn
       this._nextTurn();

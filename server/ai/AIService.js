@@ -4,9 +4,17 @@ const GameValidator = require('../game/GameValidator');
 
 class AIService {
     constructor() {
-        this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-        });
+        // Make OpenAI optional for testing
+        if (process.env.OPENAI_API_KEY) {
+            this.openai = new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY
+            });
+            this.aiEnabled = true;
+        } else {
+            console.log('Warning: OPENAI_API_KEY not set. AI bots will use basic logic.');
+            this.openai = null;
+            this.aiEnabled = false;
+        }
         this.validator = new GameValidator();
     }
 
@@ -17,6 +25,12 @@ class AIService {
     async makeDecision(gameState, playerIndex) {
         try {
             const player = gameState.players[playerIndex];
+            
+            // Use basic logic if OpenAI is not available
+            if (!this.aiEnabled) {
+                return this.makeBasicDecision(gameState, playerIndex);
+            }
+            
             const gameContext = this.prepareGameContext(gameState, playerIndex);
             
             const prompt = this.createDecisionPrompt(gameContext);
@@ -284,6 +298,24 @@ Respond with ONLY a JSON object in this format:
             'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13
         };
         return values[card.rank] || 0;
+    }
+
+    /**
+     * Basic AI decision making when OpenAI is not available
+     */
+    makeBasicDecision(gameState, playerIndex) {
+        const player = gameState.players[playerIndex];
+        const discardPile = gameState.discardPile;
+        
+        // Basic strategy: always draw from deck, discard highest value card
+        const handCopy = [...player.hand];
+        handCopy.sort((a, b) => this.getCardValue(b) - this.getCardValue(a));
+        
+        return {
+            pickFromDiscard: false, // Always draw from deck for simplicity
+            cardToDiscard: handCopy[0].id, // Discard highest value card
+            reasoning: "Basic AI: Drawing from deck and discarding highest value card"
+        };
     }
 
     /**
